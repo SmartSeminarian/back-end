@@ -1,0 +1,196 @@
+openapi: 3.0.0
+info:
+  title: Smart Seminarian API
+  description: API for the Smart Seminarian project to help users train basic C programming skills.
+
+
+paths:
+  /login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+
+  /profile:
+    get:
+      summary: Get user profile
+      responses:
+        '200':
+          description: User profile data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    type: string
+                  trainingData:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        concept:
+                          type: string
+                        status:
+                          type: string
+
+  /commendation:
+    get:
+      summary: Get next concept recommendation
+      responses:
+        '200':
+          description: Recommended concept
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  concept:
+                    type: string
+
+  /concept/{name}:
+    get:
+      summary: Get concept description
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Concept details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  motivation:
+                    type: string
+                  description:
+                    type: string
+                  example:
+                    type: string
+                  links:
+                    type: array
+                    items:
+                      type: string
+                  analogies:
+                    type: string
+
+  /problem:
+    get:
+      summary: Get problem to solve
+      responses:
+        '200':
+          description: Problem details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  description:
+                    type: string
+                  exampleInput:
+                    type: string
+                  exampleOutput:
+                    type: string
+
+  /solution:
+    post:
+      summary: Submit solution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                problemId:
+                  type: string
+                solutionCode:
+                  type: string
+      responses:
+        '200':
+          description: Solution submission response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedback:
+                    type: string
+
+  /explanation/{type}:
+    get:
+      summary: Get additional explanation
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [concept, problem, compilation, autoGrading]
+        - name: reference
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Explanation details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  explanation:
+                    type: string
+
+  /feedback:
+    post:
+      summary: Provide feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Feedback submission response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string

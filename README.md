@@ -9,8 +9,7 @@ Smart Seminarian API is designed to help users train basic C programming skills.
 - **Version:** 1.0.0
 
 ### Servers
-- **Production Server:** https://api.smartseminarian.com/v1
-
+- **Production Server:** todo
 ### Endpoints
 
 #### User Management
