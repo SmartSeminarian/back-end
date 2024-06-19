@@ -1,0 +1,4 @@
+Flask
+Flask-Dance
+python-dotenv
+requests

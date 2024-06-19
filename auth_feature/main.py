@@ -26,4 +26,4 @@ def index():
     return f"You are @{user_info['login']} on GitHub"
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", debug=True)
