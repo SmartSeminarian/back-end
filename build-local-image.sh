@@ -2,5 +2,5 @@
 
 source ./.env
 
-docker build -t krinkin/$SERVICE_NAME:$BRANCH .
+docker build -t krinkin/$PROJECT.$SERVICE_NAME:$BRANCH .
 
