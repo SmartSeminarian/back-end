@@ -2,7 +2,7 @@ openapi: 3.0.0
 info:
   title: Smart Seminarian API
   description: API for the Smart Seminarian project to help users train basic C programming skills.
-  version: 1.0.0
+  version: 0.0.1
 
 paths:
   /login:
@@ -21,6 +21,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /version:
+    get:
+      summary: Get service version
+      responses:
+        '200':
+          description: Service version information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
         default:
           description: Unexpected error
           content:
@@ -297,3 +314,11 @@ components:
           type: string
         code:
           type: integer
+
+    Version:
+        type: object
+        properties:
+            api_version:
+              type: string
+            build_info:
+              type: string

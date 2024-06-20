@@ -1,0 +1,29 @@
+version: '3.9'
+
+services:
+    service:
+        container_name: $CONTAINER_NAME
+        image: krinkin/$SERVICE_NAME:$BRANCH
+
+        ports:
+            - "5000"
+        env_file:
+            - ./.env
+        volumes:
+            - $CONTAINER_DATA:/data
+            - $VERSION_FILE:/VERSION:ro
+#UNCOMMENT_ME_FOR_DEV            - ./app:/app:ro
+
+    tunnel:
+        container_name:  ${CONTAINER_NAME}_tunnel
+        depends_on:
+            -   service
+        env_file:
+            - ./.env
+        image: cloudflare/cloudflared:latest
+        command: [ "tunnel",
+                   "--no-autoupdate",
+                   "run",
+                   "--token",
+                   "$CF_TOKEN"
+        ]
