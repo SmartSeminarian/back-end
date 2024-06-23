@@ -40,14 +40,14 @@ jobs:
           echo "GITHUB_REF: ${{ github.repository_owner }}"
           echo "GITHUB_REF: ${{ github.event.repository.name }}"
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+#      - name: Build and push Docker image
+#        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+#        with:
+#          context: .
+#          file: ./Dockerfile
+#          push: true
+#          tags: ${{ steps.meta.outputs.tags }}
+#          labels: ${{ steps.meta.outputs.labels }}
 
       - name: Ping cicd to deploy
         uses: peter-evans/repository-dispatch@v3
@@ -55,4 +55,4 @@ jobs:
           token: ${{ secrets.CICD_GITHUB_TOKEN }}
           repository: SmartSeminarian/cicd
           event-type: commit-to-branch
-          client-payload: '{"branch": "1 ${{ github.repository_owner }}" }'
+          client-payload: '{"branch": "2 ${{ github.event.repository.name }} ${{ env.branch }}" }'
