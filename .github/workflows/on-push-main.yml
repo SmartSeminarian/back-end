@@ -55,4 +55,4 @@ jobs:
           token: ${{ secrets.CICD_GITHUB_TOKEN }}
           repository: SmartSeminarian/cicd
           event-type: commit-to-branch
-          client-payload: '{"branch": "${{ github.ref }", "sha": "${{ env.sha_short }}"}'
+          client-payload: '{"branch": "${{ github.ref }}", "sha": "${{ env.sha_short }}"}'
