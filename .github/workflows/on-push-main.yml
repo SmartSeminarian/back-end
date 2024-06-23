@@ -56,5 +56,3 @@ jobs:
           repository: SmartSeminarian/cicd
           event-type: commit-to-branch
           client-payload: '{"branch": "${{ github.ref }}"}'
-
-
