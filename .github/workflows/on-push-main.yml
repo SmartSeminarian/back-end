@@ -4,6 +4,7 @@ on:
   push:
     branches:
         - 'main'
+        - 'cicd-workflow'
 jobs:
   push_to_registry:
     name: Push Docker image to Docker Hub
@@ -48,4 +49,10 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }} 
           labels: ${{ steps.meta.outputs.labels }}
 
-
+      - name: Ping cicd to deploy
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.CICD_GITHUB_TOKEN }}
+          repository: SmartSeminarian/cicd
+          event-type: commit-to-branch
+          client-payload: '{"branch": "${{ github.ref }}"}'
