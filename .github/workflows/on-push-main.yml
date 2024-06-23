@@ -49,13 +49,10 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Ping cicd to deploy
+      - name: Ping CI/CD to deploy
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.CICD_GITHUB_TOKEN }}
           repository: SmartSeminarian/cicd
           event-type: commit-to-branch
           client-payload: '{"owner": "${{ github.repository_owner }}", "repo": "${{ github.event.repository.name }}", "branch": "${{ env.branch }}",  "sha": "${{ env.sha_short }}"}'
-
-
-#          client-payload: '{"repo": "${{ github.event.repository.name }}", "branch": "${{ env.branch }}", "sha": "${{ env.sha_short }}"}'
