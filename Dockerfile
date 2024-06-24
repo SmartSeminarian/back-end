@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apt-get update
 
 ## Not nessesary but useful for the debug
-#RUN apt-get install -y htop vim git net-tools psmisc
+RUN apt-get install -y htop vim git net-tools psmisc
 
 COPY ./app /app/
 RUN mkdir -p /data

@@ -1,0 +1,5 @@
+./app/.env
+./deploy/.env
+./app/VERSION
+./docker-compose.yml
+
