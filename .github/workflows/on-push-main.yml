@@ -46,7 +46,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: krinkin/${{github.event.repository.name}}:${{ env.branch }}
+          tags: krinkin/SmartSeminarian.${{github.event.repository.name}}:${{ env.branch }}
 #            - SmartSeminarian.${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
