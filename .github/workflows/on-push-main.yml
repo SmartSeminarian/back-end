@@ -46,7 +46,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: SmartSeminarian.${{ steps.meta.outputs.tags }}
+          tags: krinkin/${{github.event.repository.name}}:${{ env.branch }}
+#            - SmartSeminarian.${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Ping CI/CD to deploy
