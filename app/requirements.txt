@@ -1,8 +1,7 @@
 Flask
 gunicorn
 python-dotenv
-
-
-
-
+flask_sqlalchemy
+flask
+flask_swagger_ui
 
