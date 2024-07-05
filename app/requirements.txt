@@ -4,4 +4,6 @@ python-dotenv
 flask_sqlalchemy
 flask
 flask_swagger_ui
-
+flask_cors
+phidata
+duckduckgo-search
