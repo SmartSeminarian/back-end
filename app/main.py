@@ -4,6 +4,7 @@ from flask_swagger_ui import get_swaggerui_blueprint
 import secrets
 
 app = Flask(__name__)
+app.instance_path = '/tmp'
 
 SWAGGER_URL = '/api/docs' #URL for exposing Swagger UI
 API_URL = '/static/swagger.yaml'
