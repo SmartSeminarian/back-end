@@ -33,39 +33,32 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Set OpenAI API key from environment variables
-if not os.getenv('OPENAI_API_KEY'):
-    logging.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
-    raise EnvironmentError("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
-else:
-    logging.info("OpenAI API key found and loaded successfully.")
 
 class QueryLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     query = db.Column(db.String(80), nullable=False)
     response = db.Column(db.String(120), nullable=False)
 
+
 assistant = Assistant(
-    llm=OpenAIChat(model="gpt-4", api_key=os.getenv('OPENAI_API_KEY')),
-    tools=[DuckDuckGo()],
-    show_tool_calls=True,
+    llm=OpenAIChat(model="gpt-4", max_tokens=100),
+    description="You help people with their health and fitness goals.",
+    instructions=["Recipes should be under 5 ingredients"],
 )
 
-def require_api_key(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if request.headers.get('x-api-key') == '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':
-            return f(*args, **kwargs)
-        else:
-            return jsonify({"error": "Unauthorized"}), 403
-    return decorated_function
+
+
+@app.route('/recipe', methods=['GET'])
+def get_recipe():
+    response = assistant.run("Share a breakfast recipe.", stream=False)
+    return jsonify({'version': response})
+
 
 @app.route('/')
 def index():
     return "Phidata Agent is running"
 
 @app.route('/ask', methods=['POST'])
-@require_api_key
 def ask():
     data = request.json
     question = data.get("question")
@@ -84,7 +77,6 @@ def ask():
     return jsonify({"response": response})
 
 @app.route('/generate_task', methods=['POST'])
-@require_api_key
 def generate_task():
     data = request.json
     topic = data.get("topic")
