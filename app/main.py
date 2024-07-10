@@ -9,6 +9,7 @@ from phi.assistant import Assistant
 from phi.llm.openai import OpenAIChat
 from phi.tools.duckduckgo import DuckDuckGo
 import secrets
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -28,76 +29,55 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 app.register_blueprint(swaggerui_blueprint)
 
 app.secret_key = 'your_secret_key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
-
-
-class QueryLog(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    query = db.Column(db.String(80), nullable=False)
-    response = db.Column(db.String(120), nullable=False)
 
 
 assistant = Assistant(
     llm=OpenAIChat(model="gpt-4", max_tokens=100),
-    description="You help people with their health and fitness goals.",
-    instructions=["Recipes should be under 5 ingredients"],
+    description="You are an expert in c language and can accomplish any task that is asked of you.",
+    #instructions=[""],
 )
-
-
-
-@app.route('/recipe', methods=['GET'])
-def get_recipe():
-    response = assistant.run("Share a breakfast recipe.", stream=False)
-    return jsonify({'version': response})
 
 
 @app.route('/')
 def index():
     return "Phidata Agent is running"
 
-@app.route('/ask', methods=['POST'])
-def ask():
-    data = request.json
-    question = data.get("question")
 
-    if not question:
-        logging.warning("No question provided")
-        return jsonify({"error": "No question provided"}), 400
+@app.route('/problem', methods=['GET'])
+def problem():
+    prompt = """
+    Generate a brief and concise algorithmic problem for people studying C language.
+    Limit the problem description to a few sentences without any example inputs or outputs.
+    """
+    # {
+    #     "description": "string",
+    #     "exampleInput": "string",
+    #     "exampleOutput": "string"
+    # }
+    response = assistant.run(prompt, stream=False)
+    #print(type(response))
 
-    response = assistant.print_response(question, markdown=True)
-    logging.info(f"Question: {question}, Response: {response}")
+    # try:
+    #     response_json = json.loads(response)
+    # except json.JSONDecodeError:
+    #     return jsonify({"error": "Failed to decode JSON from assistant response"}), 500
 
-    new_log = QueryLog(query=question, response=response)
-    db.session.add(new_log)
-    db.session.commit()
+    # Add an ID to the response
+    problem_data = {
+        "id": secrets.token_hex(8),  # Generating a unique ID
+        "description": response.replace('\n', ' '),
+        # "exampleInput": response_json.get("exampleInput", "").replace('\n', ' '),
+        # "exampleOutput": response_json.get("exampleOutput", "").replace('\n', ' ')
+    }
 
-    return jsonify({"response": response})
+    return jsonify(problem_data)
 
-@app.route('/generate_task', methods=['POST'])
-def generate_task():
-    data = request.json
-    topic = data.get("topic")
 
-    if not topic:
-        return jsonify({"error": "No topic provided"}), 400
-
-    task_prompt = f"Generate a C programming task on the topic: {topic}"
-    response = assistant.print_response(task_prompt, markdown=True)
-
-    new_log = QueryLog(query=task_prompt, response=response)
-    db.session.add(new_log)
-    db.session.commit()
-
-    return jsonify({"task": response})
 
 @app.route('/version', methods=['GET'])
 def version():
     return jsonify({'version': '0.0.1'})
 
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(debug=True)
