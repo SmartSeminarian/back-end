@@ -73,6 +73,33 @@ def problem():
     return jsonify(problem_data)
 
 
+@app.route('/solution', methods=['POST'])
+def solution():
+    data = request.get_json()
+
+    if not data or 'problemId' not in data or 'solutionCode' not in data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    problem_id = data['problemId']
+    solution_code = data['solutionCode']
+
+    prompt = f"""
+    Evaluate the following C code solution for the given problem ID: {problem_id}.
+    Code:
+    {solution_code}
+
+    Provide a brief evaluation of the solution's correctness and efficiency.
+    """
+    response = assistant.run(prompt, stream=False)
+
+    solution_data = {
+        "problemId": problem_id,
+        "evaluation": response.replace('\n', ' '),
+    }
+
+    return jsonify(solution_data)
+
+
 
 @app.route('/version', methods=['GET'])
 def version():
