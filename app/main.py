@@ -15,6 +15,13 @@ app = Flask(__name__)
 CORS(app)
 app.instance_path = '/tmp'
 
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'problems.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
 SWAGGER_URL = '/api/docs'
 API_URL = '/static/swagger.yaml'
 
@@ -33,9 +40,37 @@ app.secret_key = 'your_secret_key'
 
 assistant = Assistant(
     llm=OpenAIChat(model="gpt-4", max_tokens=100),
-    description="You are an expert in c language and can accomplish any task that is asked of you.",
+    description="""You are an excellent tutor. An excellent tutor is a guide and an
+                    educator. Your main goal is to teach students problem-solving
+                    skills while they work on a programming exercise.
+                    An excellent tutor never under any circumstances responds
+                    with code, pseudocode, or implementations of concrete func-
+                    tionalities.
+                    An excellent tutor never under any circumstances tells instruc-
+                    tions that contain concrete steps and implementation details.
+                    Instead, he provides a single subtle clue, a counter-question,
+                    or best practice to move the student’s attention to an aspect of
+                    his problem or task so they can find a solution on their own.
+                    An excellent tutor does not guess, so if you don’t know some-
+                    thing, say "Sorry, I don’t know" and tell the student to ask a
+                    human tutor.""",
     #instructions=[""],
 )
+
+
+class Problem(db.Model):
+    id = db.Column(db.String(16), primary_key=True)
+    description = db.Column(db.Text, nullable=False)
+    example_input = db.Column(db.Text)
+    example_output = db.Column(db.Text)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "description": self.description,
+            "exampleInput": self.example_input,
+            "exampleOutput": self.example_output
+        }
 
 
 @app.route('/')
@@ -65,17 +100,17 @@ def problem():
         return jsonify({"error": "Failed to decode JSON from assistant response"}), 500
 
     problem_id = secrets.token_hex(8)
-    problem_data = {
-        "id": problem_id,
-        "description": response_json.get("description", "").replace('\n', ' '),
-        "exampleInput": response_json.get("exampleInput", "").replace('\n', ' '),
-        "exampleOutput": response_json.get("exampleOutput", "").replace('\n', ' ')
-    }
+    new_problem = Problem(
+        id=problem_id,
+        description=response_json.get("description", "").replace('\n', ' '),
+        example_input=response_json.get("exampleInput", "").replace('\n', ' '),
+        example_output=response_json.get("exampleOutput", "").replace('\n', ' ')
+    )
 
-    # Store the problem
-    problems[problem_id] = problem_data
+    db.session.add(new_problem)
+    db.session.commit()
 
-    return jsonify(problem_data)
+    return jsonify(new_problem.to_dict())
 
 
 @app.route('/solution', methods=['POST'])
@@ -88,17 +123,16 @@ def solution():
     problem_id = data['problemId']
     solution_code = data['solutionCode']
 
-    # Retrieve the problem
-    problem = problems.get(problem_id)
+    problem = Problem.query.get(problem_id)
     if not problem:
         return jsonify({"error": "Problem not found"}), 404
 
     prompt = f"""
     Evaluate the following C code solution for the given problem:
 
-    Problem Description: {problem['description']}
-    Example Input: {problem['exampleInput']}
-    Example Output: {problem['exampleOutput']}
+    Problem Description: {problem.description}
+    Example Input: {problem.example_input}
+    Example Output: {problem.example_output}
 
     Code:
     {solution_code}
@@ -121,4 +155,6 @@ def version():
 
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
