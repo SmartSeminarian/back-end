@@ -43,32 +43,37 @@ def index():
     return "Phidata Agent is running"
 
 
+problems = {}
+
+
 @app.route('/problem', methods=['GET'])
 def problem():
     prompt = """
     Generate a brief and concise algorithmic problem for people studying C language.
-    Limit the problem description to a few sentences without any example inputs or outputs.
-    """
-    # {
-    #     "description": "string",
-    #     "exampleInput": "string",
-    #     "exampleOutput": "string"
-    # }
-    response = assistant.run(prompt, stream=False)
-    #print(type(response))
-
-    # try:
-    #     response_json = json.loads(response)
-    # except json.JSONDecodeError:
-    #     return jsonify({"error": "Failed to decode JSON from assistant response"}), 500
-
-    # Add an ID to the response
-    problem_data = {
-        "id": secrets.token_hex(8),  # Generating a unique ID
-        "description": response.replace('\n', ' '),
-        # "exampleInput": response_json.get("exampleInput", "").replace('\n', ' '),
-        # "exampleOutput": response_json.get("exampleOutput", "").replace('\n', ' ')
+    Provide your response in the following JSON format:
+    {
+        "description": "Problem description here",
+        "exampleInput": "Example input here",
+        "exampleOutput": "Example output here"
     }
+    """
+    response = assistant.run(prompt, stream=False)
+
+    try:
+        response_json = json.loads(response)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Failed to decode JSON from assistant response"}), 500
+
+    problem_id = secrets.token_hex(8)
+    problem_data = {
+        "id": problem_id,
+        "description": response_json.get("description", "").replace('\n', ' '),
+        "exampleInput": response_json.get("exampleInput", "").replace('\n', ' '),
+        "exampleOutput": response_json.get("exampleOutput", "").replace('\n', ' ')
+    }
+
+    # Store the problem
+    problems[problem_id] = problem_data
 
     return jsonify(problem_data)
 
@@ -83,8 +88,18 @@ def solution():
     problem_id = data['problemId']
     solution_code = data['solutionCode']
 
+    # Retrieve the problem
+    problem = problems.get(problem_id)
+    if not problem:
+        return jsonify({"error": "Problem not found"}), 404
+
     prompt = f"""
-    Evaluate the following C code solution for the given problem ID: {problem_id}.
+    Evaluate the following C code solution for the given problem:
+
+    Problem Description: {problem['description']}
+    Example Input: {problem['exampleInput']}
+    Example Output: {problem['exampleOutput']}
+
     Code:
     {solution_code}
 
@@ -98,7 +113,6 @@ def solution():
     }
 
     return jsonify(solution_data)
-
 
 
 @app.route('/version', methods=['GET'])
