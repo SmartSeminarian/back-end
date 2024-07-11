@@ -43,8 +43,8 @@ def index():
     return "Phidata Agent is running"
 
 
-problems = {}
 
+problems = {}
 
 @app.route('/problem', methods=['GET'])
 def problem():
