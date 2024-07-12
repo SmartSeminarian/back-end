@@ -39,7 +39,7 @@ app.secret_key = 'your_secret_key'
 
 
 assistant = Assistant(
-    llm=OpenAIChat(model="gpt-4", max_tokens=100),
+    llm=OpenAIChat(model="gpt-4", max_tokens=120, temperature=0.9),
     description="""You are an excellent tutor. An excellent tutor is a guide and an
                     educator. Your main goal is to teach students problem-solving
                     skills while they work on a programming exercise.
@@ -93,6 +93,7 @@ def problem():
     }
     """
     response = assistant.run(prompt, stream=False)
+    print(response)
 
     try:
         response_json = json.loads(response)
@@ -155,6 +156,7 @@ def version():
 
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(debug=True)
+
+with app.app_context():
+    db.create_all()Zz
