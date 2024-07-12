@@ -41,6 +41,10 @@ echo "CONTAINER_DATA=./.data/"  >> ./.env
 echo "VERSION_FILE=$VERSION_FILE"  >> ./.env
 echo "Version: $BRANCH `hostname` `date`" > $VERSION_FILE
 
+read -p "Enter OPENAI_API_KEY: " OPENAI_API_KEY
+echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> ./.env
+
+
 cat ./.env
 mkdir -p ./.data/
 cp ./deploy/docker-compose.yml ./docker-compose.yml
