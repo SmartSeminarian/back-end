@@ -10,15 +10,13 @@ from phi.llm.openai import OpenAIChat
 from phi.tools.duckduckgo import DuckDuckGo
 import secrets
 import json
+from config import Config
 
 app = Flask(__name__)
 CORS(app)
 app.instance_path = '/tmp'
 
-
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'problems.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config.from_object(Config)
 
 db = SQLAlchemy(app)
 
@@ -35,25 +33,20 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 
 app.register_blueprint(swaggerui_blueprint)
 
-app.secret_key = 'your_secret_key'
+
+
+def load_prompt(filename):
+    with open(os.path.join('prompts', filename), 'r') as file:
+        return file.read().strip()
+
+
+def format_prompt(template, **kwargs):
+    return template.format(**kwargs)
 
 
 assistant = Assistant(
     llm=OpenAIChat(model="gpt-4", max_tokens=120, temperature=0.9),
-    description="""You are an excellent tutor. An excellent tutor is a guide and an
-                    educator. Your main goal is to teach students problem-solving
-                    skills while they work on a programming exercise.
-                    An excellent tutor never under any circumstances responds
-                    with code, pseudocode, or implementations of concrete func-
-                    tionalities.
-                    An excellent tutor never under any circumstances tells instruc-
-                    tions that contain concrete steps and implementation details.
-                    Instead, he provides a single subtle clue, a counter-question,
-                    or best practice to move the student’s attention to an aspect of
-                    his problem or task so they can find a solution on their own.
-                    An excellent tutor does not guess, so if you don’t know some-
-                    thing, say "Sorry, I don’t know" and tell the student to ask a
-                    human tutor.""",
+    description=load_prompt('tutor_description.txt'),
     #instructions=[""],
 )
 
@@ -83,15 +76,7 @@ problems = {}
 
 @app.route('/problem', methods=['GET'])
 def problem():
-    prompt = """
-    Generate a brief and concise algorithmic problem for people studying C language.
-    Provide your response in the following JSON format:
-    {
-        "description": "Problem description here",
-        "exampleInput": "Example input here",
-        "exampleOutput": "Example output here"
-    }
-    """
+    prompt = load_prompt('problem_generation.txt')
     response = assistant.run(prompt, stream=False)
     print(response)
 
@@ -128,18 +113,13 @@ def solution():
     if not problem:
         return jsonify({"error": "Problem not found"}), 404
 
-    prompt = f"""
-    Evaluate the following C code solution for the given problem:
+    prompt_template = load_prompt('solution_evaluation.txt')
+    prompt = format_prompt(prompt_template,
+                           description=problem.description,
+                           example_input=problem.example_input,
+                           example_output=problem.example_output,
+                           solution_code=solution_code)
 
-    Problem Description: {problem.description}
-    Example Input: {problem.example_input}
-    Example Output: {problem.example_output}
-
-    Code:
-    {solution_code}
-
-    Provide a brief evaluation of the solution's correctness and efficiency.
-    """
     response = assistant.run(prompt, stream=False)
 
     solution_data = {
@@ -159,4 +139,4 @@ if __name__ == '__main__':
     app.run(debug=True)
 
 with app.app_context():
-    db.create_all()Zz
+    db.create_all()
