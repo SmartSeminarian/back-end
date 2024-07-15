@@ -1,0 +1,14 @@
+Explore the concept "{concept}" and provide a detailed description. Also, identify at least 3 related concepts and explain their relationships. Format your response as a JSON object with the following structure:
+
+{{
+    "name": "{concept}",
+    "description": "Detailed description of the concept",
+    "related_concepts": [
+        {{
+            "name": "Related concept 1",
+            "description": "Brief description of related concept 1",
+            "relationship": "Type of relationship (e.g., IS_A, HAS_PART, PREREQUISITE)"
+        }},
+        // ... more related concepts
+    ]
+}}

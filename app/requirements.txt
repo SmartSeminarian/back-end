@@ -9,3 +9,6 @@ phidata
 duckduckgo-search
 requests
 openai
+neo4j
+py2neo
+flask-neo4j
