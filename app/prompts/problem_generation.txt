@@ -1,0 +1,7 @@
+Generate a brief and concise algorithmic problem for people studying C language.
+Provide your response in the following JSON format:
+{
+    "description": "Problem description here",
+    "exampleInput": "Example input here",
+    "exampleOutput": "Example output here"
+}

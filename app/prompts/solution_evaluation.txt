@@ -1,0 +1,10 @@
+Evaluate the following C code solution for the given problem:
+
+Problem Description: {description}
+Example Input: {example_input}
+Example Output: {example_output}
+
+Code:
+{solution_code}
+
+Provide a brief evaluation of the solution's correctness and efficiency.
