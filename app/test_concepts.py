@@ -16,8 +16,8 @@ def test_create_concept():
         "name": "Machine Learning",
         "description": "A field of AI that uses statistical techniques to give computer systems the ability to learn from data",
         "related_concepts": [
-            {"name": "Deep Learning", "relationship": "IS_A"},
-            {"name": "Data Science", "relationship": "RELATED_TO"}
+            {"name": "Deep Learning", "description": "A subset of machine learning based on artificial neural networks", "relationship": "IS_A"},
+            {"name": "Data Science", "description": "An interdisciplinary field that uses scientific methods, processes, algorithms and systems to extract knowledge and insights from data", "relationship": "RELATED_TO"}
         ]
     }
     response = requests.post(url, json=data)

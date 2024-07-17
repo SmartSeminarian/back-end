@@ -50,7 +50,9 @@ class Concept:
     @staticmethod
     def create(tx, name, description=None):
         query = (
-            "CREATE (c:Concept {id: $id, name: $name, description: $description}) "
+            "MERGE (c:Concept {name: $name}) "
+            "ON CREATE SET c.id = $id, c.description = $description "
+            "ON MATCH SET c.description = CASE WHEN c.description IS NULL THEN $description ELSE c.description END "
             "RETURN c"
         )
         result = tx.run(query, id=str(uuid.uuid4()), name=name, description=description)
@@ -66,13 +68,15 @@ class Concept:
     @staticmethod
     def create_relationship(tx, source_name, target_name, relationship_type):
         query = (
-            "MATCH (source:Concept {name: $source_name}) "
-            "MATCH (target:Concept {name: $target_name}) "
-            "CREATE (source)-[r:" + relationship_type + "]->(target) "
-            "RETURN type(r)"
+                "MATCH (source:Concept {name: $source_name}) "
+                "MATCH (target:Concept {name: $target_name}) "
+                "MERGE (source)-[r:" + relationship_type + "]->(target) "
+                                                           "RETURN type(r)"
         )
         result = tx.run(query, source_name=source_name, target_name=target_name)
         return result.single()['type(r)']
+
+
 def load_prompt(filename):
     with open(os.path.join('prompts', filename), 'r') as file:
         return file.read().strip()
@@ -240,12 +244,17 @@ def explore_concept():
     prompt_template = load_prompt('concept_exploration.txt')
     prompt = format_prompt(prompt_template, concept=concept_name)
 
-    response = assistant.run(prompt, stream=False)
-
     try:
+        response = assistant.run(prompt, stream=False)
+        app.logger.info(f"AI Response: {response}")  # Log the raw response
         concept_data = json.loads(response)
-    except json.JSONDecodeError:
-        return jsonify({"error": "Failed to decode JSON from assistant response"}), 500
+    except json.JSONDecodeError as e:
+        app.logger.error(f"JSON Decode Error: {str(e)}")
+        app.logger.error(f"Raw Response: {response}")
+        return jsonify({"error": "Failed to decode JSON from assistant response", "raw_response": response}), 500
+    except Exception as e:
+        app.logger.error(f"Unexpected Error: {str(e)}")
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
     # Store the concept and its relationships in the graph database
     with neo4j_driver.session() as session:
