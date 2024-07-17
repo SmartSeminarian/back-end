@@ -1,25 +1,20 @@
-Explore the concept "{concept}" and provide a detailed description (maximum 100 words). Also, identify exactly 3 related concepts and explain their relationships. Format your response as a JSON object with the following structure:
+Please provide information about the concept "{concept}" in the following JSON format:
 
 {{
-    "name": "{concept}",
-    "description": "Detailed description of the concept (max 100 words)",
-    "related_concepts": [
-        {{
-            "name": "Related concept 1",
-            "description": "Brief description of related concept 1 (max 50 words)",
-            "relationship": "Type of relationship (e.g., IS_A, HAS_PART, PREREQUISITE, RELATED_TO)"
-        }},
-        {{
-            "name": "Related concept 2",
-            "description": "Brief description of related concept 2 (max 50 words)",
-            "relationship": "Type of relationship"
-        }},
-        {{
-            "name": "Related concept 3",
-            "description": "Brief description of related concept 3 (max 50 words)",
-            "relationship": "Type of relationship"
-        }}
-    ]
+  "name": "{concept}",
+  "description": "A brief description of {concept}",
+  "related_concepts": [
+    {{
+      "name": "Related Concept 1",
+      "description": "Brief description of Related Concept 1",
+      "relationship": "TYPE_OF_RELATIONSHIP"
+    }},
+    {{
+      "name": "Related Concept 2",
+      "description": "Brief description of Related Concept 2",
+      "relationship": "TYPE_OF_RELATIONSHIP"
+    }}
+  ]
 }}
 
-Ensure that your response is a complete and valid JSON object. Do not include any text outside of the JSON structure.
+Ensure that the response is a valid JSON object. Use uppercase with underscores for relationship types (e.g., IS_A, PART_OF, RELATED_TO) and don't write any additional text.

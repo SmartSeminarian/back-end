@@ -67,15 +67,15 @@ class Concept:
 
     @staticmethod
     def create_relationship(tx, source_name, target_name, relationship_type):
+        formatted_relationship_type = relationship_type.replace(' ', '_').upper()
         query = (
-                "MATCH (source:Concept {name: $source_name}) "
-                "MATCH (target:Concept {name: $target_name}) "
-                "MERGE (source)-[r:" + relationship_type + "]->(target) "
-                                                           "RETURN type(r)"
+            "MATCH (source:Concept {name: $source_name}) "
+            "MATCH (target:Concept {name: $target_name}) "
+            f"MERGE (source)-[r:`{formatted_relationship_type}`]->(target) "
+            "RETURN type(r)"
         )
         result = tx.run(query, source_name=source_name, target_name=target_name)
         return result.single()['type(r)']
-
 
 def load_prompt(filename):
     with open(os.path.join('prompts', filename), 'r') as file:
@@ -87,7 +87,7 @@ def format_prompt(template, **kwargs):
 
 
 assistant = Assistant(
-    llm=OpenAIChat(model="gpt-4", max_tokens=120, temperature=0.9),
+    llm=OpenAIChat(model="gpt-4", max_tokens=300, temperature=0.9),
     description=load_prompt('tutor_description.txt'),
     tools=[DuckDuckGo()],
 )
@@ -190,10 +190,11 @@ def create_concept():
         # Create relationships with related concepts
         for related in related_concepts:
             related_name = related['name']
+            related_description = related.get('description', '')
             relationship_type = related.get('relationship', 'RELATED_TO')
 
             # Create the related concept if it doesn't exist
-            session.write_transaction(Concept.create, related_name)
+            session.write_transaction(Concept.create, related_name, related_description)
 
             # Create the relationship
             session.write_transaction(Concept.create_relationship, name, related_name, relationship_type)
@@ -256,15 +257,15 @@ def explore_concept():
         app.logger.error(f"Unexpected Error: {str(e)}")
         return jsonify({"error": "An unexpected error occurred"}), 500
 
-    # Store the concept and its relationships in the graph database
     with neo4j_driver.session() as session:
         main_concept = session.execute_write(Concept.create, concept_name, concept_data.get('description', ''))
 
         for related in concept_data.get('related_concepts', []):
             related_name = related['name']
+            related_description = related.get('description', '')
             relationship_type = related.get('relationship', 'RELATED_TO')
 
-            session.execute_write(Concept.create, related_name, related.get('description', ''))
+            session.execute_write(Concept.create, related_name, related_description)
             session.execute_write(Concept.create_relationship, concept_name, related_name, relationship_type)
 
     return jsonify(concept_data)
