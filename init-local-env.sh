@@ -41,9 +41,14 @@ echo "CONTAINER_DATA=./.data/"  >> ./.env
 echo "VERSION_FILE=$VERSION_FILE"  >> ./.env
 echo "Version: $BRANCH `hostname` `date`" > $VERSION_FILE
 
+# neo4j-configurations
+echo "NEO4J_URI=bolt://neo4j-db:7687" >> ./.env
+echo "NEO4J_USER=neo4j" >> ./.env
+echo "NEO4J_PASSWORD=secret" >> ./.env
+echo "NEO4J_AUTH=neo4j/secret" >> ./.env
+
 read -p "Enter OPENAI_API_KEY: " OPENAI_API_KEY
 echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> ./.env
-
 
 cat ./.env
 mkdir -p ./.data/
