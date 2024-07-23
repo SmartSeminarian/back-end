@@ -20,7 +20,6 @@ CORS(app)
 app.instance_path = '/tmp'
 
 app.config.from_object(Config)
-
 db = SQLAlchemy(app)
 
 app.config['NEO4J_URI'] = Config.NEO4J_URI
@@ -44,6 +43,38 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 )
 
 app.register_blueprint(swaggerui_blueprint)
+
+
+class Token(db.Model):
+    __bind_key__ = 'tokens'
+    token_name = db.Column(db.String(50), primary_key=True)
+    token = db.Column(db.String(100), unique=True, nullable=False)
+
+class User(db.Model):
+    github_username = db.Column(db.String(100), primary_key=True)
+
+class Session(db.Model):
+    id = db.Column(db.String(32), primary_key=True)
+    github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
+
+class UserProblem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
+    problem_id = db.Column(db.String(16), db.ForeignKey('problem.id'), nullable=False)
+
+class Problem(db.Model):
+    id = db.Column(db.String(16), primary_key=True)
+    description = db.Column(db.Text, nullable=False)
+    example_input = db.Column(db.Text)
+    example_output = db.Column(db.Text)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "description": self.description,
+            "exampleInput": self.example_input,
+            "exampleOutput": self.example_output
+        }
 
 
 class Concept:
@@ -86,6 +117,27 @@ def format_prompt(template, **kwargs):
     return template.format(**kwargs)
 
 
+def generate_session_id():
+    return secrets.token_hex(16)
+
+
+def require_session(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        session_id = request.headers.get('X-Session-ID')
+        if not session_id:
+            return jsonify({"error": "No session ID provided"}), 401
+
+        session = Session.query.get(session_id)
+        if not session:
+            return jsonify({"error": "Invalid session ID"}), 401
+
+        kwargs['github_username'] = session.github_username
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
 assistant = Assistant(
     llm=OpenAIChat(model="gpt-4", max_tokens=300, temperature=0.9),
     description=load_prompt('tutor_description.txt'),
@@ -93,31 +145,47 @@ assistant = Assistant(
 )
 
 
-class Problem(db.Model):
-    id = db.Column(db.String(16), primary_key=True)
-    description = db.Column(db.Text, nullable=False)
-    example_input = db.Column(db.Text)
-    example_output = db.Column(db.Text)
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "description": self.description,
-            "exampleInput": self.example_input,
-            "exampleOutput": self.example_output
-        }
-
 
 @app.route('/')
 def index():
     return "Phidata Agent is running"
 
 
-problems = {}
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if not data or 'github_username' not in data or 'token' not in data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    github_username = data['github_username']
+    full_token = data['token']
+
+    token_parts = full_token.split(':')
+    if len(token_parts) != 2:
+        return jsonify({"error": "Invalid token format"}), 400
+
+    token_name, token_value = token_parts
+
+    token_record = Token.query.filter_by(token_name=token_name, token=token_value).first()
+    if not token_record:
+        return jsonify({"error": "Invalid token"}), 401
+
+    user = User.query.get(github_username)
+    if not user:
+        user = User(github_username=github_username)
+        db.session.add(user)
+
+    session_id = generate_session_id()
+    new_session = Session(id=session_id, github_username=github_username)
+    db.session.add(new_session)
+
+    db.session.commit()
+    return jsonify({"session_id": session_id}), 200
 
 
 @app.route('/problem', methods=['GET'])
-def problem():
+@require_session
+def problem(github_username):
     prompt = load_prompt('problem_generation.txt')
     response = assistant.run(prompt, stream=False)
     print(response)
@@ -136,6 +204,10 @@ def problem():
     )
 
     db.session.add(new_problem)
+
+    user_problem = UserProblem(github_username=github_username, problem_id=problem_id)
+    db.session.add(user_problem)
+
     db.session.commit()
 
     return jsonify(new_problem.to_dict())
@@ -276,9 +348,14 @@ def version():
     return jsonify({'version': '0.0.1'})
 
 
+with app.app_context():
+    db.create_all()
+    existing_token = Token.query.filter_by(token_name='test').first()
+    if not existing_token:
+        test_token = Token(token_name='test', token='VongOahophufshepwucsimyig5ogukir')
+        db.session.add(test_token)
+        db.session.commit()
+
 if __name__ == '__main__':
     neo4j_driver.close()
     app.run(debug=True)
-
-with app.app_context():
-    db.create_all()
