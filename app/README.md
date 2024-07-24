@@ -3,6 +3,7 @@ Added separate docker container for neo4j graph database. To test locally docker
 ./init-local-env.sh
 docker compose up --build
 docker exec -it back-end /bin/bash (To get access to backend container's terminal)
+cd tests (In container's terminal)
 python3 test_concepts.py (In container's terminal: To test concepts)
 Now browse to localhost:7474
 Login with username=neo4j , password=secret
