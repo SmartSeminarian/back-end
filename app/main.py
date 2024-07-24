@@ -214,7 +214,8 @@ def problem(github_username):
 
 
 @app.route('/solution', methods=['POST'])
-def solution():
+@require_session
+def solution(github_username):
     data = request.get_json()
 
     if not data or 'problemId' not in data or 'solutionCode' not in data:
@@ -222,6 +223,10 @@ def solution():
 
     problem_id = data['problemId']
     solution_code = data['solutionCode']
+
+    user_problem = UserProblem.query.filter_by(github_username=github_username, problem_id=problem_id).first()
+    if not user_problem:
+        return jsonify({"error": "Problem not found or not associated with user"}), 404
 
     problem = Problem.query.get(problem_id)
     if not problem:
