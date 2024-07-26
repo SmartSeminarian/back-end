@@ -4,7 +4,6 @@ check_status_code()
 {
     if [ "$1" -ne $2 ]; then
         echo "Error: Status code for $3 request must be $2"
-        rm -f ./response.json
         exit 1
     fi
 }
@@ -20,7 +19,7 @@ session_id=$(echo $login_response | jq --raw-output '.session_id')
 echo "Session ID: $session_id"
 
 # Version Request
-status_code=$(curl -s -o response.json \
+status_code=$(curl -s -o get-version.json \
     -w "%{http_code}" \
     -X GET $URL/version \
     -H "accept: application/json")
@@ -29,7 +28,7 @@ echo "Version: HTTP Status Code = $status_code"
 check_status_code $status_code 200 "version"
 
 # Post concept
-status_code=$(curl -s -o response.json \
+status_code=$(curl -s -o post-concept.json \
     -w "%{http_code}" \
     -X POST $URL/concept \
     -H "accept: application/json" \
@@ -47,7 +46,7 @@ echo "Post Concept: HTTP Status Code = $status_code"
 check_status_code $status_code 201 "post concept"
 
 # Get concept by name
-status_code=$(curl -s -o response.json \
+status_code=$(curl -s -o get-concept.json \
     -w "%{http_code}" \
     -X GET $URL/concept/C-Programming \
     -H 'accept: application/json')
@@ -55,7 +54,7 @@ echo "Get Concept(that exists): HTTP Status Code = $status_code"
 check_status_code $status_code 200 "get concept"
 
 # Get invalid concept 
-status_code=$(curl -s -o response.json \
+status_code=$(curl -s -o get-invalid-concept.json \
     -w "%{http_code}" \
     -X GET $URL/concept/SmartSeminarian \
     -H 'accept: application/json')
@@ -63,18 +62,18 @@ echo "Get Concept(that does not exist): HTTP Status Code = $status_code"
 check_status_code $status_code 404 "get invalid concept"
 
 # Problem request
-status_code=$(curl -s -o response.json \
+status_code=$(curl -s -o get-problem.json \
     -w "%{http_code}" \
     -X GET $URL/problem \
     -H "accept: application/json" \
     -H "X-Session-ID: $session_id" )
-problemId=$(cat response.json | jq -r .id) # Extract problemId from json to use in Submit Solution
+problemId=$(cat get-problem.json | jq -r .id) # Extract problemId from json to use in Submit Solution
 echo "Problem: HTTP Status Code = $status_code"
 check_status_code $status_code 200 "get problem"
 
 # Problem request with invalid session id
 invalid_session_id="when_invalid_must_have_status_code:401"
-status_code=$(curl -s -o response.json \
+status_code=$(curl -s -o get-problem-invalid-session.json \
     -w "%{http_code}" \
     -X GET $URL/problem \
     -H "accept: application/json" \
@@ -83,7 +82,7 @@ echo "Problem(Invalid session id): HTTP Status Code = $status_code"
 check_status_code $status_code 401 "get problem with invalid session id"
 
 # Problem request with no session id
-status_code=$(curl -s -o response.json \
+status_code=$(curl -s -o get-problem-no-session.json \
     -w "%{http_code}" \
     -X GET $URL/problem \
     -H "accept: application/json")
@@ -91,7 +90,7 @@ echo "Problem Request(No session id): HTTP Status Code = $status_code"
 check_status_code $status_code 401 "get problem with no session id"
 
 # Submit solution
-status_code=$(curl -s -o response.json \
+status_code=$(curl -s -o post-solution.json \
     -w "%{http_code}" \
     -X POST $URL/solution \
     -H 'accept: application/json' \
@@ -105,5 +104,3 @@ echo "Post Solution: HTTP Status Code = $status_code"
 check_status_code $status_code 200 "post solution"
 
 echo "All tests have passed!"
-
-rm -f ./response.json
