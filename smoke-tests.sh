@@ -106,4 +106,4 @@ check_status_code $status_code 200 "post solution"
 
 echo "All tests have passed!"
 
-rm -rf ./response.json
+rm -f ./response.json
