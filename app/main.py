@@ -11,6 +11,10 @@ from phi.tools.duckduckgo import DuckDuckGo
 import secrets
 import json
 from config import Config
+import time
+from datetime import timedelta
+
+deployment_time = time.time()
 
 app = Flask(__name__)
 CORS(app)
@@ -132,7 +136,17 @@ def solution():
 
 @app.route('/version', methods=['GET'])
 def version():
-    return jsonify({'version': '0.0.1'})
+    current_time = time.time()
+    uptime = str(timedelta(seconds = current_time - deployment_time))
+
+    return jsonify({
+        'version': '0.0.1',
+        'build_branch': os.getenv('BRANCH'),
+        'sha_short': os.getenv('SHA_SHORT'),
+        'commit_time': os.getenv('COMMIT_TIME'),
+        'deployment_time': os.getenv('DEPLOY_TIME'),
+        'service_uptime': uptime
+    })
 
 
 if __name__ == '__main__':
