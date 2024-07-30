@@ -37,7 +37,7 @@ echo "REPO=$REPO" >> ./.env
 echo "BRANCH=$BRANCH" >> ./.env
 echo "SERVICE_NAME=$SERVICE_NAME" >> ./.env
 echo "CONTAINER_NAME=$CONTAINER_NAME"  >> ./.env
-echo "CONTAINER_DATA=./.data/"  >> ./.env
+echo "CONTAINER_DATA=./data/"  >> ./.env
 echo "VERSION_FILE=$VERSION_FILE"  >> ./.env
 echo "Version: $BRANCH `hostname` `date`" > $VERSION_FILE
 
@@ -51,11 +51,10 @@ read -p "Enter OPENAI_API_KEY: " OPENAI_API_KEY
 echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> ./.env
 
 cat ./.env
-mkdir -p ./.data/
+mkdir -p ./data/
 cp ./deploy/docker-compose.yml ./docker-compose.yml
 sed -i "s/^#UNCOMMENT_ME_FOR_DEV//" ./docker-compose.yml
 sed -i '0,/5000/s/5000/5000:5000/' ./docker-compose.yml
 sed -i "s/^            test: curl --fail http:\/\/api-stage.csai.site\/version || exit 1//" ./docker-compose.yml
 sed -i "s/^        image: krinkin\/\$PROJECT\.\$SERVICE_NAME:\$BRANCH//" ./docker-compose.yml
 sed -i "/#DELETE_BLOCK_FOR_DEV/,/#DELETE_BLOCK_FOR_DEV/d" ./docker-compose.yml
-
