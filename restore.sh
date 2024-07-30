@@ -1,7 +1,7 @@
 #!/bin/bash
 
-SOURCE_DB="./app/$1"
-BACKUP_DB="./app/backups/backup-$1"
+SOURCE_DB="./data/$1"
+BACKUP_DB="./data/backups/backup-$1"
 
 # Check backup database exists
 if [ -f "$BACKUP_DB" ]; then

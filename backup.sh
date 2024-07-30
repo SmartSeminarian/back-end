@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Paths to the source and backup databases
-SOURCE_DB="./app/$1"
-BACKUP_DB="./app/backups/backup-$1"
+SOURCE_DB="./data/$1"
+BACKUP_DB="./data/backups/backup-$1"
 
-mkdir -p ./app/backups
+mkdir -p ./data/backups
 
 # Check source database exists
 if [ -f "$SOURCE_DB" ]; then
