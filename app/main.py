@@ -13,6 +13,13 @@ import json
 from config import Config
 from neo4j import GraphDatabase
 import uuid
+import networkx as nx
+import matplotlib.pyplot as plt
+from io import BytesIO
+import base64
+import openai
+from gqlalchemy import Memgraph
+from gqlalchemy import Node, Field
 
 
 app = Flask(__name__)
@@ -22,14 +29,9 @@ app.instance_path = '/tmp'
 app.config.from_object(Config)
 db = SQLAlchemy(app)
 
-app.config['NEO4J_URI'] = Config.NEO4J_URI
-app.config['NEO4J_USER'] = Config.NEO4J_USER
-app.config['NEO4J_PASSWORD'] = Config.NEO4J_PASSWORD
+memgraph = Memgraph(host=Config.MEMGRAPH_HOST, port=int(Config.MEMGRAPH_PORT))
 
-neo4j_driver = GraphDatabase.driver(
-    Config.NEO4J_URI,
-    auth=(Config.NEO4J_USER, Config.NEO4J_PASSWORD)
-)
+openai.api_key = 'sk-None-dLOf4WuJqVdFQ9mMEeTrT3BlbkFJKFvVW7eKSwE776nhGoGm'
 
 SWAGGER_URL = '/api/docs'
 API_URL = '/static/swagger.yaml'
@@ -76,37 +78,11 @@ class Problem(db.Model):
             "exampleOutput": self.example_output
         }
 
-
-class Concept:
-    @staticmethod
-    def create(tx, name, description=None):
-        query = (
-            "MERGE (c:Concept {name: $name}) "
-            "ON CREATE SET c.id = $id, c.description = $description "
-            "ON MATCH SET c.description = CASE WHEN c.description IS NULL THEN $description ELSE c.description END "
-            "RETURN c"
-        )
-        result = tx.run(query, id=str(uuid.uuid4()), name=name, description=description)
-        return result.single()['c']
-
-    @staticmethod
-    def get_by_name(tx, name):
-        query = "MATCH (c:Concept {name: $name}) RETURN c"
-        result = tx.run(query, name=name)
-        record = result.single()
-        return record['c'] if record else None
-
-    @staticmethod
-    def create_relationship(tx, source_name, target_name, relationship_type):
-        formatted_relationship_type = relationship_type.replace(' ', '_').upper()
-        query = (
-            "MATCH (source:Concept {name: $source_name}) "
-            "MATCH (target:Concept {name: $target_name}) "
-            f"MERGE (source)-[r:`{formatted_relationship_type}`]->(target) "
-            "RETURN type(r)"
-        )
-        result = tx.run(query, source_name=source_name, target_name=target_name)
-        return result.single()['type(r)']
+class Concept(Node):
+    id: str = Field()
+    name: str = Field()
+    description: str = Field()
+    difficulty: int = Field()
 
 def load_prompt(filename):
     with open(os.path.join('prompts', filename), 'r') as file:
@@ -128,7 +104,7 @@ def require_session(f):
         if not session_id:
             return jsonify({"error": "No session ID provided"}), 401
 
-        session = Session.query.get(session_id)
+        session = db.session.get(Session, session_id)
         if not session:
             return jsonify({"error": "Invalid session ID"}), 401
 
@@ -170,7 +146,8 @@ def login():
     if not token_record:
         return jsonify({"error": "Invalid token"}), 401
 
-    user = User.query.get(github_username)
+    user = db.session.get(User, github_username)
+
     if not user:
         user = User(github_username=github_username)
         db.session.add(user)
@@ -250,102 +227,122 @@ def solution(github_username):
 
 
 @app.route('/concept', methods=['POST'])
-def create_concept():
-    data = request.get_json()
+@require_session
+def create_concept(github_username):
+    data = request.json
     if not data or 'name' not in data:
-        return jsonify({"error": "Invalid request"}), 400
+        return jsonify({"error": "Name is required"}), 400
 
     name = data['name']
-    description = data.get('description', '')
-    related_concepts = data.get('related_concepts', [])
+    description = data.get('description')
+    difficulty = data.get('difficulty', 1)
 
-    with neo4j_driver.session() as session:
-        # Create or get the main concept
-        result = session.write_transaction(Concept.create, name, description)
-        main_concept = result
+    # Check if concept already exists
+    query = "MATCH (c:Concept {name: $name}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"name": name})
+    if next(result, None):
+        return jsonify({"error": "Concept with this name already exists"}), 409
 
-        # Create relationships with related concepts
-        for related in related_concepts:
-            related_name = related['name']
-            related_description = related.get('description', '')
-            relationship_type = related.get('relationship', 'RELATED_TO')
-
-            # Create the related concept if it doesn't exist
-            session.write_transaction(Concept.create, related_name, related_description)
-
-            # Create the relationship
-            session.write_transaction(Concept.create_relationship, name, related_name, relationship_type)
-
-    return jsonify({
-        "id": main_concept['id'],
-        "name": main_concept['name'],
-        "description": main_concept['description']
-    }), 201
-
-@app.route('/concept/<name>', methods=['GET'])
-def get_concept(name):
-    with neo4j_driver.session() as session:
-        concept = session.execute_read(Concept.get_by_name, name)
-        if not concept:
-            return jsonify({"error": "Concept not found"}), 404
-
-        # Fetch related concepts
-        query = (
-            "MATCH (c:Concept {name: $name})-[r]-(related:Concept) "
-            "RETURN type(r) as relationship, related.name as name, related.description as description"
-        )
-        result = session.run(query, name=name)
-        related_concepts = [
-            {
-                "name": record["name"],
-                "description": record["description"],
-                "relationship": record["relationship"]
-            }
-            for record in result
-        ]
-
-        return jsonify({
-            "id": concept['id'],
-            "name": concept['name'],
-            "description": concept['description'],
-            "related_concepts": related_concepts
-        })
-
-
-@app.route('/explore_concept', methods=['POST'])
-def explore_concept():
-    data = request.get_json()
-    if not data or 'concept' not in data:
-        return jsonify({"error": "Invalid request"}), 400
-
-    concept_name = data['concept']
-    prompt_template = load_prompt('concept_exploration.txt')
-    prompt = format_prompt(prompt_template, concept=concept_name)
+    # Create new concept
+    new_concept_id = str(uuid.uuid4())
+    query = (
+        "CREATE (c:Concept {id: $id, name: $name, description: $description, difficulty: $difficulty}) "
+        "RETURN c"
+    )
+    params = {
+        "id": new_concept_id,
+        "name": name,
+        "description": description,
+        "difficulty": difficulty
+    }
 
     try:
-        response = assistant.run(prompt, stream=False)
-        app.logger.info(f"AI Response: {response}")  # Log the raw response
-        concept_data = json.loads(response)
-    except json.JSONDecodeError as e:
-        app.logger.error(f"JSON Decode Error: {str(e)}")
-        app.logger.error(f"Raw Response: {response}")
-        return jsonify({"error": "Failed to decode JSON from assistant response", "raw_response": response}), 500
+        result = memgraph.execute_and_fetch(query, params)
+        created_concept = next(result, None)
+        if not created_concept:
+            raise Exception("No result returned from create query")
+
+        # Access the node properties directly
+        concept_node = created_concept['c']
+        concept_data = {
+            "id": concept_node.id,
+            "name": concept_node.name,
+            "description": concept_node.description,
+            "difficulty": concept_node.difficulty
+        }
+        return jsonify(concept_data), 201
     except Exception as e:
-        app.logger.error(f"Unexpected Error: {str(e)}")
-        return jsonify({"error": "An unexpected error occurred"}), 500
+        error_message = f"Failed to create concept. Error: {str(e)}"
+        print(error_message)
 
-    with neo4j_driver.session() as session:
-        main_concept = session.execute_write(Concept.create, concept_name, concept_data.get('description', ''))
+        check_query = "MATCH (c:Concept {name: $name}) RETURN c"
+        check_result = memgraph.execute_and_fetch(check_query, {"name": name})
+        if next(check_result, None):
+            error_message += " However, the concept appears to have been created in the database."
 
-        for related in concept_data.get('related_concepts', []):
-            related_name = related['name']
-            related_description = related.get('description', '')
-            relationship_type = related.get('relationship', 'RELATED_TO')
+        return jsonify({"error": error_message}), 500
 
-            session.execute_write(Concept.create, related_name, related_description)
-            session.execute_write(Concept.create_relationship, concept_name, related_name, relationship_type)
 
-    return jsonify(concept_data)
+@app.route('/concept', methods=['GET'])
+@require_session
+def get_all_concepts(github_username):
+    query = "MATCH (c:Concept) RETURN c"
+    result = memgraph.execute_and_fetch(query)
+
+    concepts = []
+    for record in result:
+        concept_node = record['c']
+        concepts.append({
+            "id": concept_node.id,
+            "name": concept_node.name,
+            "description": concept_node.description,
+            "difficulty": concept_node.difficulty
+        })
+
+    return jsonify(concepts), 200
+
+
+@app.route('/concept/<concept_id>', methods=['DELETE'])
+@require_session
+def delete_concept(github_username, concept_id):
+    # Check if concept exists
+    query = "MATCH (c:Concept {id: $id}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    concept = next(result, None)
+
+    if not concept:
+        return jsonify({"error": "Concept not found"}), 404
+
+    # Delete the concept
+    delete_query = "MATCH (c:Concept {id: $id}) DETACH DELETE c"
+    try:
+        memgraph.execute(delete_query, {"id": concept_id})
+        return jsonify({"message": "Concept deleted successfully"}), 200
+    except Exception as e:
+        error_message = f"Failed to delete concept. Error: {str(e)}"
+        print(error_message)  # Log the error
+        return jsonify({"error": error_message}), 500
+
+
+@app.route('/concept/<concept_id>', methods=['GET'])
+@require_session
+def get_concept(github_username, concept_id):
+    query = "MATCH (c:Concept {id: $id}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    concept = next(result, None)
+
+    if not concept:
+        return jsonify({"error": "Concept not found"}), 404
+
+    concept_node = concept['c']
+    concept_data = {
+        "id": concept_node.id,
+        "name": concept_node.name,
+        "description": concept_node.description,
+        "difficulty": concept_node.difficulty
+    }
+
+    return jsonify(concept_data), 200
 
 
 @app.route('/version', methods=['GET'])
@@ -362,5 +359,4 @@ with app.app_context():
         db.session.commit()
 
 if __name__ == '__main__':
-    neo4j_driver.close()
     app.run(debug=True)

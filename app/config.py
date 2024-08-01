@@ -10,6 +10,14 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SECRET_KEY = os.getenv('SECRET_KEY', 'default_secret_key')
 
-    NEO4J_URI = os.getenv('NEO4J_URI')
-    NEO4J_USER = os.getenv('NEO4J_USER')
-    NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
+    # Memgraph connection settings
+    MEMGRAPH_HOST = os.getenv('MEMGRAPH_HOST', 'localhost')
+    MEMGRAPH_PORT = os.getenv('MEMGRAPH_PORT', '7687')
+    MEMGRAPH_USERNAME = os.getenv('MEMGRAPH_USERNAME', '')  # Default is no authentication
+    MEMGRAPH_PASSWORD = os.getenv('MEMGRAPH_PASSWORD', '')  # Default is no authentication
+
+    # Construct Memgraph URI
+    MEMGRAPH_URI = f"bolt://{MEMGRAPH_HOST}:{MEMGRAPH_PORT}"
+
+    # OpenAI API key
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
