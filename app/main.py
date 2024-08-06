@@ -11,6 +11,8 @@ from phi.tools.duckduckgo import DuckDuckGo
 import secrets
 import json
 from config import Config
+import time
+from datetime import timedelta, datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -132,7 +134,21 @@ def solution():
 
 @app.route('/version', methods=['GET'])
 def version():
-    return jsonify({'version': '0.0.1'})
+    if os.environ.get('DEPLOY_TIME') == None: 
+        uptime = "only evailable on deploy"
+    else:
+        delpoy_time_str = os.getenv('DEPLOY_TIME')
+        deploy_time = datetime.strptime(delpoy_time_str, "%Y-%m-%d %H:%M:%S %z").timestamp()
+        uptime = str(timedelta(seconds = time.time() - deploy_time))
+
+    return jsonify({
+        'version': '0.0.1',
+        'build_branch': os.getenv('BRANCH'),
+        'sha_full': os.getenv('SHA_FULL'),
+        'commit_time': os.getenv('COMMIT_TIME'),
+        'deployment_time': os.getenv('DEPLOY_TIME', "only available on deploy"), # DEPLOY_TIME env variable only defined in cicd deploy-service workflow
+        'service_uptime': uptime 
+    })
 
 
 if __name__ == '__main__':
