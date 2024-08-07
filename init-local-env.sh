@@ -4,6 +4,10 @@ BRANCH=`git rev-parse --abbrev-ref HEAD`
 
 REPO=`git rev-parse --show-toplevel`
 
+SHA_FULL=`git rev-parse HEAD`
+
+COMMIT_TIME=$(git show -s --format=%ci "$SHA_FULL")
+
 remote_url=$(git remote get-url origin)
 
 # Check if the remote URL was fetched successfully
@@ -35,10 +39,13 @@ VERSION_FILE=./VERSION
 echo "PROJECT=$ORG_NAME" > ./.env
 echo "REPO=$REPO" >> ./.env
 echo "BRANCH=$BRANCH" >> ./.env
+echo "SHA_FULL=$SHA_FULL" >> ./.env
+echo "COMMIT_TIME=$COMMIT_TIME" >> ./.env
 echo "SERVICE_NAME=$SERVICE_NAME" >> ./.env
 echo "CONTAINER_NAME=$CONTAINER_NAME"  >> ./.env
 echo "CONTAINER_DATA=./.data/"  >> ./.env
 echo "VERSION_FILE=$VERSION_FILE"  >> ./.env
+# echo "DEPLOY_TIME=$(date +"%Y-%m-%d %H:%M:%S %z")" >> ./.env # UNCOMMENT TO TEST DEPLOY TIME AND SERVICE UP TIME FOR /version
 echo "Version: $BRANCH `hostname` `date`" > $VERSION_FILE
 
 read -p "Enter OPENAI_API_KEY: " OPENAI_API_KEY
