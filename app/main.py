@@ -142,7 +142,7 @@ def version():
         uptime = str(timedelta(seconds = time.time() - deploy_time))
 
     return jsonify({
-        'version': '0.0.1',
+        'version': '0.0.2',
         'build_branch': os.getenv('BRANCH'),
         'sha_full': os.getenv('SHA_FULL'),
         'commit_time': os.getenv('COMMIT_TIME'),
