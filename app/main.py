@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_swagger_ui import get_swaggerui_blueprint
 from flask_cors import CORS
@@ -11,12 +11,7 @@ from phi.tools.duckduckgo import DuckDuckGo
 import secrets
 import json
 from config import Config
-from neo4j import GraphDatabase
 import uuid
-import networkx as nx
-import matplotlib.pyplot as plt
-from io import BytesIO
-import base64
 import openai
 from gqlalchemy import Memgraph
 from gqlalchemy import Node, Field
