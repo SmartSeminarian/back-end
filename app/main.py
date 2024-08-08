@@ -340,6 +340,89 @@ def get_concept(github_username, concept_id):
     return jsonify(concept_data), 200
 
 
+from datetime import datetime
+
+
+@app.route('/concept/<concept_id>', methods=['PUT'])
+@require_session
+def update_concept(github_username, concept_id):
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    # Check if the concept exists
+    query = "MATCH (c:Concept {id: $id}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    old_concept = next(result, None)
+
+    if not old_concept:
+        return jsonify({"error": "Concept not found"}), 404
+
+    old_concept_node = old_concept['c']
+
+    # Create a new node with updated information
+    new_concept_id = str(uuid.uuid4())
+    new_version = old_concept_node.version + 1 if hasattr(old_concept_node, 'version') else 1
+
+    create_query = """
+    CREATE (new:Concept {
+        id: $new_id,
+        name: $name,
+        description: $description,
+        difficulty: $difficulty,
+        version: $version,
+        created_at: $created_at
+    })
+    WITH new
+    MATCH (old:Concept {id: $old_id})
+    CREATE (new)-[:PREVIOUS_VERSION]->(old)
+    RETURN new
+    """
+
+    params = {
+        "new_id": new_concept_id,
+        "name": data.get('name', old_concept_node.name),
+        "description": data.get('description', old_concept_node.description),
+        "difficulty": data.get('difficulty', old_concept_node.difficulty),
+        "version": new_version,
+        "created_at": datetime.utcnow().isoformat(),
+        "old_id": concept_id
+    }
+
+    try:
+        result = memgraph.execute_and_fetch(create_query, params)
+        new_concept = next(result, None)
+
+        if not new_concept:
+            raise Exception("Failed to create new version of concept")
+
+        # Update relationships to point to the new version
+        update_relations_query = """
+        MATCH (old:Concept {id: $old_id})<-[r]-()
+        WHERE NOT type(r) = 'PREVIOUS_VERSION'
+        MATCH (new:Concept {id: $new_id})
+        CREATE (new)<-[new_r]-()
+        SET new_r = r
+        DELETE r
+        """
+        memgraph.execute(update_relations_query, {"old_id": concept_id, "new_id": new_concept_id})
+
+        new_concept_data = {
+            "id": new_concept['new'].id,
+            "name": new_concept['new'].name,
+            "description": new_concept['new'].description,
+            "difficulty": new_concept['new'].difficulty,
+            "version": new_concept['new'].version,
+            "created_at": new_concept['new'].created_at
+        }
+
+        return jsonify(new_concept_data), 200
+
+    except Exception as e:
+        error_message = f"Failed to update concept. Error: {str(e)}"
+        print(error_message)  # Log the error
+        return jsonify({"error": error_message}), 500
+
 @app.route('/version', methods=['GET'])
 def version():
     return jsonify({'version': '0.0.1'})
