@@ -303,6 +303,132 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /concept/bind:
+    post:
+      summary: Bind two concepts with a relation
+      tags:
+        - Concepts
+      security:
+        - SessionAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source_id:
+                  type: string
+                target_id:
+                  type: string
+                relation:
+                  type: string
+              required:
+                - source_id
+                - target_id
+                - relation
+      responses:
+        '201':
+          description: Concepts bound successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source_id:
+                    type: string
+                  target_id:
+                    type: string
+                  relation_type:
+                    type: string
+                  relation:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /concept/unbind:
+    post:
+      summary: Unbind two concepts (remove relation)
+      tags:
+        - Concepts
+      security:
+        - SessionAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source_id:
+                  type: string
+                target_id:
+                  type: string
+                relation:
+                  type: string
+              required:
+                - source_id
+                - target_id
+      responses:
+        '200':
+          description: Concepts unbound successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    source_id:
+                      type: string
+                    target_id:
+                      type: string
+                    relation_type:
+                      type: string
+                    relation:
+                      type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No matching relations found to unbind
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+
   /problem:
     get:
       security:

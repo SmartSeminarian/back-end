@@ -396,12 +396,11 @@ def update_concept(github_username, concept_id):
         if not new_concept:
             raise Exception("Failed to create new version of concept")
 
-        # Update relationships to point to the new version
         update_relations_query = """
-        MATCH (old:Concept {id: $old_id})<-[r]-()
+        MATCH (old:Concept {id: $old_id})-[r:RELATED]->(target)
         WHERE NOT type(r) = 'PREVIOUS_VERSION'
         MATCH (new:Concept {id: $new_id})
-        CREATE (new)<-[new_r]-()
+        CREATE (new)-[new_r:RELATED]->(target)
         SET new_r = r
         DELETE r
         """
@@ -422,6 +421,93 @@ def update_concept(github_username, concept_id):
         error_message = f"Failed to update concept. Error: {str(e)}"
         print(error_message)  # Log the error
         return jsonify({"error": error_message}), 500
+
+
+@app.route('/concept/bind', methods=['POST'])
+@require_session
+def bind_concepts(github_username):
+    data = request.json
+    if not data or 'source_id' not in data or 'target_id' not in data or 'relation' not in data:
+        return jsonify({"error": "Invalid request. Required fields: source_id, target_id, relation"}), 400
+
+    source_id = data['source_id']
+    target_id = data['target_id']
+    relation = data['relation']
+
+    query = """
+    MATCH (source:Concept {id: $source_id})
+    MATCH (target:Concept {id: $target_id})
+    WHERE source <> target
+    CREATE (source)-[r:RELATED {type: $relation}]->(target)
+    RETURN source.id as source_id, target.id as target_id, type(r) as relation_type, r.type as relation
+    """
+
+    try:
+        result = memgraph.execute_and_fetch(query,
+                                            {"source_id": source_id, "target_id": target_id, "relation": relation})
+        created_relation = next(result, None)
+
+        if not created_relation:
+            raise Exception("Failed to create relation between concepts")
+
+        return jsonify({
+            "source_id": created_relation['source_id'],
+            "target_id": created_relation['target_id'],
+            "relation_type": created_relation['relation_type'],
+            "relation": created_relation['relation']
+        }), 201
+
+    except Exception as e:
+        error_message = f"Failed to bind concepts. Error: {str(e)}"
+        print(error_message)  # Log the error
+        return jsonify({"error": error_message}), 500
+
+
+@app.route('/concept/unbind', methods=['POST'])
+@require_session
+def unbind_concepts(github_username):
+    data = request.json
+    if not data or 'source_id' not in data or 'target_id' not in data:
+        return jsonify({"error": "Invalid request. Required fields: source_id, target_id"}), 400
+
+    source_id = data['source_id']
+    target_id = data['target_id']
+    relation = data.get('relation')  # Optional: if provided, only unbind this specific relation
+
+    query = """
+    MATCH (source:Concept {id: $source_id})-[r:RELATED]->(target:Concept {id: $target_id})
+    WHERE source <> target
+    """
+
+    if relation:
+        query += "AND r.type = $relation "
+
+    query += """
+    WITH r, source, target
+    DELETE r
+    RETURN source.id as source_id, target.id as target_id, 'RELATED' as relation_type
+    """
+
+    try:
+        result = memgraph.execute_and_fetch(query,
+                                            {"source_id": source_id, "target_id": target_id, "relation": relation})
+        deleted_relations = list(result)
+
+        if not deleted_relations:
+            return jsonify({"error": "No matching relations found to unbind"}), 404
+
+        return jsonify([{
+            "source_id": rel['source_id'],
+            "target_id": rel['target_id'],
+            "relation_type": rel['relation_type'],
+            "relation": relation if relation else "is_related_to"
+        } for rel in deleted_relations]), 200
+
+    except Exception as e:
+        error_message = f"Failed to unbind concepts. Error: {str(e)}"
+        print(error_message)  # Log the error
+        return jsonify({"error": error_message}), 500
+
 
 @app.route('/version', methods=['GET'])
 def version():
