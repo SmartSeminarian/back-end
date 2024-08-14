@@ -9,3 +9,4 @@ phidata
 duckduckgo-search
 requests
 openai
+neo4j

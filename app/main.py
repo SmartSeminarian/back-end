@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_swagger_ui import get_swaggerui_blueprint
 from flask_cors import CORS
@@ -11,16 +11,22 @@ from phi.tools.duckduckgo import DuckDuckGo
 import secrets
 import json
 from config import Config
-import time
-from datetime import timedelta, datetime
+import uuid
+import openai
+from gqlalchemy import Memgraph
+from gqlalchemy import Node, Field
+
 
 app = Flask(__name__)
 CORS(app)
 app.instance_path = '/tmp'
 
 app.config.from_object(Config)
-
 db = SQLAlchemy(app)
+
+memgraph = Memgraph(host=Config.MEMGRAPH_HOST, port=int(Config.MEMGRAPH_PORT))
+
+openai.api_key = 'sk-None-dLOf4WuJqVdFQ9mMEeTrT3BlbkFJKFvVW7eKSwE776nhGoGm'
 
 SWAGGER_URL = '/api/docs'
 API_URL = '/static/swagger.yaml'
@@ -36,22 +42,22 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 app.register_blueprint(swaggerui_blueprint)
 
 
+class Token(db.Model):
+    __bind_key__ = 'tokens'
+    token_name = db.Column(db.String(50), primary_key=True)
+    token = db.Column(db.String(100), unique=True, nullable=False)
 
-def load_prompt(filename):
-    with open(os.path.join('prompts', filename), 'r') as file:
-        return file.read().strip()
+class User(db.Model):
+    github_username = db.Column(db.String(100), primary_key=True)
 
+class Session(db.Model):
+    id = db.Column(db.String(32), primary_key=True)
+    github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
 
-def format_prompt(template, **kwargs):
-    return template.format(**kwargs)
-
-
-assistant = Assistant(
-    llm=OpenAIChat(model="gpt-4", max_tokens=120, temperature=0.9),
-    description=load_prompt('tutor_description.txt'),
-    #instructions=[""],
-)
-
+class UserProblem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
+    problem_id = db.Column(db.String(16), db.ForeignKey('problem.id'), nullable=False)
 
 class Problem(db.Model):
     id = db.Column(db.String(16), primary_key=True)
@@ -67,17 +73,91 @@ class Problem(db.Model):
             "exampleOutput": self.example_output
         }
 
+class Concept(Node):
+    id: str = Field()
+    name: str = Field()
+    description: str = Field()
+    difficulty: int = Field()
+
+def load_prompt(filename):
+    with open(os.path.join('prompts', filename), 'r') as file:
+        return file.read().strip()
+
+
+def format_prompt(template, **kwargs):
+    return template.format(**kwargs)
+
+
+def generate_session_id():
+    return secrets.token_hex(16)
+
+
+def require_session(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        session_id = request.headers.get('X-Session-ID')
+        if not session_id:
+            return jsonify({"error": "No session ID provided"}), 401
+
+        session = db.session.get(Session, session_id)
+        if not session:
+            return jsonify({"error": "Invalid session ID"}), 401
+
+        kwargs['github_username'] = session.github_username
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+assistant = Assistant(
+    llm=OpenAIChat(model="gpt-4", max_tokens=300, temperature=0.9),
+    description=load_prompt('tutor_description.txt'),
+    tools=[DuckDuckGo()],
+)
+
+
 
 @app.route('/')
 def index():
     return "Phidata Agent is running"
 
 
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if not data or 'github_username' not in data or 'token' not in data:
+        return jsonify({"error": "Invalid request"}), 400
 
-problems = {}
+    github_username = data['github_username']
+    full_token = data['token']
+
+    token_parts = full_token.split(':')
+    if len(token_parts) != 2:
+        return jsonify({"error": "Invalid token format"}), 400
+
+    token_name, token_value = token_parts
+
+    token_record = Token.query.filter_by(token_name=token_name, token=token_value).first()
+    if not token_record:
+        return jsonify({"error": "Invalid token"}), 401
+
+    user = db.session.get(User, github_username)
+
+    if not user:
+        user = User(github_username=github_username)
+        db.session.add(user)
+
+    session_id = generate_session_id()
+    new_session = Session(id=session_id, github_username=github_username)
+    db.session.add(new_session)
+
+    db.session.commit()
+    return jsonify({"session_id": session_id}), 200
+
 
 @app.route('/problem', methods=['GET'])
-def problem():
+@require_session
+def problem(github_username):
     prompt = load_prompt('problem_generation.txt')
     response = assistant.run(prompt, stream=False)
     print(response)
@@ -96,13 +176,18 @@ def problem():
     )
 
     db.session.add(new_problem)
+
+    user_problem = UserProblem(github_username=github_username, problem_id=problem_id)
+    db.session.add(user_problem)
+
     db.session.commit()
 
     return jsonify(new_problem.to_dict())
 
 
 @app.route('/solution', methods=['POST'])
-def solution():
+@require_session
+def solution(github_username):
     data = request.get_json()
 
     if not data or 'problemId' not in data or 'solutionCode' not in data:
@@ -110,6 +195,10 @@ def solution():
 
     problem_id = data['problemId']
     solution_code = data['solutionCode']
+
+    user_problem = UserProblem.query.filter_by(github_username=github_username, problem_id=problem_id).first()
+    if not user_problem:
+        return jsonify({"error": "Problem not found or not associated with user"}), 404
 
     problem = Problem.query.get(problem_id)
     if not problem:
@@ -132,27 +221,220 @@ def solution():
     return jsonify(solution_data)
 
 
+@app.route('/concept', methods=['POST'])
+@require_session
+def create_concept(github_username):
+    data = request.json
+    if not data or 'name' not in data:
+        return jsonify({"error": "Name is required"}), 400
+
+    name = data['name']
+    description = data.get('description')
+    difficulty = data.get('difficulty', 1)
+
+    # Check if concept already exists
+    query = "MATCH (c:Concept {name: $name}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"name": name})
+    if next(result, None):
+        return jsonify({"error": "Concept with this name already exists"}), 409
+
+    # Create new concept
+    new_concept_id = str(uuid.uuid4())
+    query = (
+        "CREATE (c:Concept {id: $id, name: $name, description: $description, difficulty: $difficulty}) "
+        "RETURN c"
+    )
+    params = {
+        "id": new_concept_id,
+        "name": name,
+        "description": description,
+        "difficulty": difficulty
+    }
+
+    try:
+        result = memgraph.execute_and_fetch(query, params)
+        created_concept = next(result, None)
+        if not created_concept:
+            raise Exception("No result returned from create query")
+
+        # Access the node properties directly
+        concept_node = created_concept['c']
+        concept_data = {
+            "id": concept_node.id,
+            "name": concept_node.name,
+            "description": concept_node.description,
+            "difficulty": concept_node.difficulty
+        }
+        return jsonify(concept_data), 201
+    except Exception as e:
+        error_message = f"Failed to create concept. Error: {str(e)}"
+        print(error_message)
+
+        check_query = "MATCH (c:Concept {name: $name}) RETURN c"
+        check_result = memgraph.execute_and_fetch(check_query, {"name": name})
+        if next(check_result, None):
+            error_message += " However, the concept appears to have been created in the database."
+
+        return jsonify({"error": error_message}), 500
+
+
+@app.route('/concept', methods=['GET'])
+@require_session
+def get_all_concepts(github_username):
+    query = "MATCH (c:Concept) RETURN c"
+    result = memgraph.execute_and_fetch(query)
+
+    concepts = []
+    for record in result:
+        concept_node = record['c']
+        concepts.append({
+            "id": concept_node.id,
+            "name": concept_node.name,
+            "description": concept_node.description,
+            "difficulty": concept_node.difficulty
+        })
+
+    return jsonify(concepts), 200
+
+
+@app.route('/concept/<concept_id>', methods=['DELETE'])
+@require_session
+def delete_concept(github_username, concept_id):
+    # Check if concept exists
+    query = "MATCH (c:Concept {id: $id}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    concept = next(result, None)
+
+    if not concept:
+        return jsonify({"error": "Concept not found"}), 404
+
+    # Delete the concept
+    delete_query = "MATCH (c:Concept {id: $id}) DETACH DELETE c"
+    try:
+        memgraph.execute(delete_query, {"id": concept_id})
+        return jsonify({"message": "Concept deleted successfully"}), 200
+    except Exception as e:
+        error_message = f"Failed to delete concept. Error: {str(e)}"
+        print(error_message)  # Log the error
+        return jsonify({"error": error_message}), 500
+
+
+@app.route('/concept/<concept_id>', methods=['GET'])
+@require_session
+def get_concept(github_username, concept_id):
+    query = "MATCH (c:Concept {id: $id}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    concept = next(result, None)
+
+    if not concept:
+        return jsonify({"error": "Concept not found"}), 404
+
+    concept_node = concept['c']
+    concept_data = {
+        "id": concept_node.id,
+        "name": concept_node.name,
+        "description": concept_node.description,
+        "difficulty": concept_node.difficulty
+    }
+
+    return jsonify(concept_data), 200
+
+
+from datetime import datetime
+
+
+@app.route('/concept/<concept_id>', methods=['PUT'])
+@require_session
+def update_concept(github_username, concept_id):
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    # Check if the concept exists
+    query = "MATCH (c:Concept {id: $id}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    old_concept = next(result, None)
+
+    if not old_concept:
+        return jsonify({"error": "Concept not found"}), 404
+
+    old_concept_node = old_concept['c']
+
+    # Create a new node with updated information
+    new_concept_id = str(uuid.uuid4())
+    new_version = old_concept_node.version + 1 if hasattr(old_concept_node, 'version') else 1
+
+    create_query = """
+    CREATE (new:Concept {
+        id: $new_id,
+        name: $name,
+        description: $description,
+        difficulty: $difficulty,
+        version: $version,
+        created_at: $created_at
+    })
+    WITH new
+    MATCH (old:Concept {id: $old_id})
+    CREATE (new)-[:PREVIOUS_VERSION]->(old)
+    RETURN new
+    """
+
+    params = {
+        "new_id": new_concept_id,
+        "name": data.get('name', old_concept_node.name),
+        "description": data.get('description', old_concept_node.description),
+        "difficulty": data.get('difficulty', old_concept_node.difficulty),
+        "version": new_version,
+        "created_at": datetime.utcnow().isoformat(),
+        "old_id": concept_id
+    }
+
+    try:
+        result = memgraph.execute_and_fetch(create_query, params)
+        new_concept = next(result, None)
+
+        if not new_concept:
+            raise Exception("Failed to create new version of concept")
+
+        # Update relationships to point to the new version
+        update_relations_query = """
+        MATCH (old:Concept {id: $old_id})<-[r]-()
+        WHERE NOT type(r) = 'PREVIOUS_VERSION'
+        MATCH (new:Concept {id: $new_id})
+        CREATE (new)<-[new_r]-()
+        SET new_r = r
+        DELETE r
+        """
+        memgraph.execute(update_relations_query, {"old_id": concept_id, "new_id": new_concept_id})
+
+        new_concept_data = {
+            "id": new_concept['new'].id,
+            "name": new_concept['new'].name,
+            "description": new_concept['new'].description,
+            "difficulty": new_concept['new'].difficulty,
+            "version": new_concept['new'].version,
+            "created_at": new_concept['new'].created_at
+        }
+
+        return jsonify(new_concept_data), 200
+
+    except Exception as e:
+        error_message = f"Failed to update concept. Error: {str(e)}"
+        print(error_message)  # Log the error
+        return jsonify({"error": error_message}), 500
+
 @app.route('/version', methods=['GET'])
 def version():
-    if os.environ.get('DEPLOY_TIME') == None: 
-        uptime = "only evailable on deploy"
-    else:
-        delpoy_time_str = os.getenv('DEPLOY_TIME')
-        deploy_time = datetime.strptime(delpoy_time_str, "%Y-%m-%d %H:%M:%S %z").timestamp()
-        uptime = str(timedelta(seconds = time.time() - deploy_time))
+    return jsonify({'version': '0.0.1'})
 
-    return jsonify({
-        'version': '0.0.2',
-        'build_branch': os.getenv('BRANCH'),
-        'sha_full': os.getenv('SHA_FULL'),
-        'commit_time': os.getenv('COMMIT_TIME'),
-        'deployment_time': os.getenv('DEPLOY_TIME', "only available on deploy"), # DEPLOY_TIME env variable only defined in cicd deploy-service workflow
-        'service_uptime': uptime 
-    })
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
 
 with app.app_context():
     db.create_all()
+    existing_token = Token.query.filter_by(token_name='test').first()
+    if not existing_token:
+        test_token = Token(token_name='test', token='VongOahophufshepwucsimyig5ogukir')
+        db.session.add(test_token)
+        db.session.commit()
+
+if __name__ == '__main__':
+    app.run(debug=True)

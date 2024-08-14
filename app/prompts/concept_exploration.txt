@@ -1,0 +1,20 @@
+Please provide information about the concept "{concept}" in the following JSON format:
+
+{{
+  "name": "{concept}",
+  "description": "A brief description of {concept}",
+  "related_concepts": [
+    {{
+      "name": "Related Concept 1",
+      "description": "Brief description of Related Concept 1",
+      "relationship": "TYPE_OF_RELATIONSHIP"
+    }},
+    {{
+      "name": "Related Concept 2",
+      "description": "Brief description of Related Concept 2",
+      "relationship": "TYPE_OF_RELATIONSHIP"
+    }}
+  ]
+}}
+
+Ensure that the response is a valid JSON object. Use uppercase with underscores for relationship types (e.g., IS_A, PART_OF, RELATED_TO) and don't write any additional text.

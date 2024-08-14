@@ -13,14 +13,37 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              type: object
+              properties:
+                github_username:
+                  type: string
+                token:
+                  type: string
+              required:
+                - github_username
+                - token
       responses:
         '200':
           description: Successful login
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LoginResponse'
+                type: object
+                properties:
+                  session_id:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -45,58 +68,236 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /profile:
+
+  /concept:
     get:
-      summary: Get user profile
+      summary: Get all concepts
+      tags:
+        - Concepts
+      security:
+        - SessionAuth: [ ]
       responses:
         '200':
-          description: User profile data
+          description: List of all concepts
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserProfile'
-        default:
-          description: Unexpected error
+                type: array
+                items:
+                  $ref: '#/components/schemas/Concept'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /recommendation:
-    get:
-      summary: Get next concept recommendation
+    post:
+      summary: Create a new concept
+      tags:
+        - Concepts
+      security:
+        - SessionAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                difficulty:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+              required:
+                - name
       responses:
-        '200':
-          description: Recommended concept
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Recommendation'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /concept/{name}:
-    get:
-      summary: Get concept description
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Concept details
+        '201':
+          description: Concept created successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Concept'
-        default:
-          description: Unexpected error
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict - Concept with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /concept/{conceptId}:
+    get:
+      summary: Get a concept by ID
+      tags:
+        - Concepts
+      security:
+        - SessionAuth: [ ]
+      parameters:
+        - in: path
+          name: conceptId
+          required: true
+          schema:
+            type: string
+          description: The ID of the concept to retrieve
+      responses:
+        '200':
+          description: Concept retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Concept'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found - Concept with the given ID does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete a concept
+      tags:
+        - Concepts
+      security:
+        - SessionAuth: [ ]
+      parameters:
+        - in: path
+          name: conceptId
+          required: true
+          schema:
+            type: string
+          description: The ID of the concept to delete
+      responses:
+        '200':
+          description: Concept deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Concept deleted successfully"
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found - Concept with the given ID does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update a concept (creates a new version)
+      tags:
+        - Concepts
+      security:
+        - SessionAuth: [ ]
+      parameters:
+        - in: path
+          name: conceptId
+          required: true
+          schema:
+            type: string
+          description: The ID of the concept to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                difficulty:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+      responses:
+        '200':
+          description: Concept updated successfully (new version created)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Concept'
+                  - type: object
+                    properties:
+                      version:
+                        type: integer
+                      created_at:
+                        type: string
+                        format: date-time
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found - Concept with the given ID does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
           content:
             application/json:
               schema:
@@ -104,6 +305,8 @@ paths:
 
   /problem:
     get:
+      security:
+        - SessionAuth: [ ]
       summary: Get problem to solve
       responses:
         '200':
@@ -112,6 +315,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -121,20 +336,53 @@ paths:
 
   /solution:
     post:
+      security:
+        - SessionAuth: [ ]
       summary: Submit solution
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SolutionSubmission'
+              type: object
+              properties:
+                problemId:
+                  type: string
+                solutionCode:
+                  type: string
+              required:
+                - problemId
+                - solutionCode
       responses:
         '200':
           description: Solution submission response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SolutionResponse'
+                type: object
+                properties:
+                  problemId:
+                    type: string
+                  evaluation:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Problem not found or not associated with user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -142,118 +390,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /explanation/{type}:
-    get:
-      summary: Get additional explanation
-      parameters:
-        - name: type
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [concept, problem, compilation, autoGrading]
-        - name: reference
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Explanation details
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Explanation'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /feedback:
-    post:
-      summary: Provide feedback
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Feedback'
-      responses:
-        '200':
-          description: Feedback submission response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FeedbackResponse'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
 components:
+  securitySchemes:
+    SessionAuth:
+      type: apiKey
+      in: header
+      name: X-Session-ID
+
   schemas:
     LoginRequest:
       type: object
       properties:
-        username:
+        github_username:
           type: string
-        password:
+        token:
           type: string
       required:
-        - username
-        - password
+        - github_username
+        - token
 
     LoginResponse:
       type: object
       properties:
-        token:
+        session_id:
           type: string
 
-    UserProfile:
-      type: object
-      properties:
-        username:
-          type: string
-        trainingData:
-          type: array
-          items:
-            $ref: '#/components/schemas/TrainingData'
-
-    TrainingData:
-      type: object
-      properties:
-        concept:
-          type: string
-        status:
-          type: string
-
-    Recommendation:
-      type: object
-      properties:
-        concept:
-          type: string
 
     Concept:
       type: object
       properties:
-        name:
+        id:
           type: string
-        motivation:
+        name:
           type: string
         description:
           type: string
-        example:
-          type: string
-        links:
-          type: array
-          items:
-            type: string
-        analogies:
-          type: string
+        difficulty:
+          type: integer
+      required:
+        - id
+        - name
+
 
     Problem:
       type: object
@@ -281,30 +459,9 @@ components:
     SolutionResponse:
       type: object
       properties:
-        feedback:
+        problemId:
           type: string
-
-    Explanation:
-      type: object
-      properties:
-        explanation:
-          type: string
-
-    Feedback:
-      type: object
-      properties:
-        type:
-          type: string
-        content:
-          type: string
-      required:
-        - type
-        - content
-
-    FeedbackResponse:
-      type: object
-      properties:
-        status:
+        evaluation:
           type: string
 
     Error:
