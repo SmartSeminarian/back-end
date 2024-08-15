@@ -9,4 +9,5 @@ phidata
 duckduckgo-search
 requests
 openai
+pytest
 gqlalchemy
