@@ -7,15 +7,8 @@ BASE_URL = "http://service:5000"
 SESSION_ID = "54b180f6b7e8591d912eca45bcde217f"
 
 
-@pytest.fixture
-def headers():
-    return {
-        "Content-Type": "application/json",
-        "X-Session-ID": SESSION_ID
-    }
-
-
-def test_login(headers):
+@pytest.fixture(scope="module")
+def session_id():
     url = f"{BASE_URL}/login"
     data = {
         "github_username": "test_user",
@@ -23,7 +16,19 @@ def test_login(headers):
     }
     response = requests.post(url, json=data)
     assert response.status_code == 200
-    assert "session_id" in response.json()
+    session_data = response.json()
+    assert "session_id" in session_data
+    return session_data["session_id"]
+
+@pytest.fixture(scope="module")
+def headers(session_id):
+    return {
+        "Content-Type": "application/json",
+        "X-Session-ID": session_id
+    }
+
+def test_login(session_id):
+    assert session_id is not None
 
 
 def create_unique_concept(headers):
