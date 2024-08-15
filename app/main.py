@@ -24,7 +24,7 @@ app.instance_path = '/tmp'
 app.config.from_object(Config)
 db = SQLAlchemy(app)
 
-memgraph = Memgraph(host=Config.MEMGRAPH_HOST, port=int(Config.MEMGRAPH_PORT))
+memgraph = Memgraph(host=os.getenv('MEMGRAPH_HOST'), port=int(os.getenv('MEMGRAPH_PORT')))
 
 openai.api_key = 'sk-None-dLOf4WuJqVdFQ9mMEeTrT3BlbkFJKFvVW7eKSwE776nhGoGm'
 
@@ -172,7 +172,7 @@ def problem(github_username):
         id=problem_id,
         description=response_json.get("description", "").replace('\n', ' '),
         example_input=response_json.get("exampleInput", "").replace('\n', ' '),
-        example_output=response_json.get("exampleOutput", "").replace('\n', ' ')
+        example_output=respcreatedonse_json.get("exampleOutput", "").replace('\n', ' ')
     )
 
     db.session.add(new_problem)

@@ -11,7 +11,7 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'default_secret_key')
 
     # Memgraph connection settings
-    MEMGRAPH_HOST = os.getenv('MEMGRAPH_HOST', 'localhost')
+    MEMGRAPH_HOST = os.getenv('MEMGRAPH_HOST', 'memgraph')
     MEMGRAPH_PORT = os.getenv('MEMGRAPH_PORT', '7687')
     MEMGRAPH_USERNAME = os.getenv('MEMGRAPH_USERNAME', '')  # Default is no authentication
     MEMGRAPH_PASSWORD = os.getenv('MEMGRAPH_PASSWORD', '')  # Default is no authentication

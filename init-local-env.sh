@@ -48,11 +48,14 @@ echo "VERSION_FILE=$VERSION_FILE"  >> ./.env
 # echo "DEPLOY_TIME=$(date +"%Y-%m-%d %H:%M:%S %z")" >> ./.env # UNCOMMENT TO TEST DEPLOY TIME AND SERVICE UP TIME FOR /version
 echo "Version: $BRANCH `hostname` `date`" > $VERSION_FILE
 
-# neo4j-configurations
-echo "NEO4J_URI=bolt://neo4j-db:7687" >> ./.env
-echo "NEO4J_USER=neo4j" >> ./.env
-echo "NEO4J_PASSWORD=secret" >> ./.env
-echo "NEO4J_AUTH=neo4j/secret" >> ./.env
+#neo4j-configurations
+#echo "NEO4J_URI=bolt://neo4j-db:7687" >> ./.env
+#echo "NEO4J_USER=neo4j" >> ./.env
+#echo "NEO4J_PASSWORD=secret" >> ./.env
+#echo "NEO4J_AUTH=neo4j/secret" >> ./.env
+
+echo "MEMGRAPH_HOST=memgraph" >> ./.env
+echo "MEMGRAPH_PORT=7687" >> ./.env
 
 read -p "Enter OPENAI_API_KEY: " OPENAI_API_KEY
 echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> ./.env
@@ -60,9 +63,4 @@ echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> ./.env
 cat ./.env
 mkdir -p ./.data/
 cp ./deploy/docker-compose.yml ./docker-compose.yml
-sed -i "s/^#UNCOMMENT_ME_FOR_DEV//" ./docker-compose.yml
-sed -i '0,/5000/s/5000/5000:5000/' ./docker-compose.yml
-sed -i "s/^            test: curl --fail http:\/\/api-stage.csai.site\/version || exit 1//" ./docker-compose.yml
-sed -i "s/^        image: krinkin\/\$PROJECT\.\$SERVICE_NAME:\$BRANCH//" ./docker-compose.yml
-sed -i "/#DELETE_BLOCK_FOR_DEV/,/#DELETE_BLOCK_FOR_DEV/d" ./docker-compose.yml
 

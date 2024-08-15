@@ -3,7 +3,7 @@ import requests
 import json
 import uuid
 
-BASE_URL = "http://localhost:5000"
+BASE_URL = "http://service:5000"
 SESSION_ID = "54b180f6b7e8591d912eca45bcde217f"
 
 
