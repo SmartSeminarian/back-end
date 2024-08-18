@@ -15,11 +15,11 @@ import uuid
 import openai
 from gqlalchemy import Memgraph
 from gqlalchemy import Node, Field
-
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
-app.instance_path = '/tmp'
+app.instance_path = '/data'
 
 app.config.from_object(Config)
 db = SQLAlchemy(app)
@@ -79,18 +79,13 @@ class Concept(Node):
     description: str = Field()
     difficulty: int = Field()
 
-def load_prompt(filename):
-    with open(os.path.join('prompts', filename), 'r') as file:
-        return file.read().strip()
 
-
-def format_prompt(template, **kwargs):
-    return template.format(**kwargs)
-
-
-def generate_session_id():
-    return secrets.token_hex(16)
-
+class Dialogue(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
+    session_id = db.Column(db.String(32), db.ForeignKey('session.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    content = db.Column(db.Text, nullable=False)
 
 def require_session(f):
     @wraps(f)
@@ -107,6 +102,39 @@ def require_session(f):
         return f(*args, **kwargs)
 
     return decorated_function
+
+def save_dialogue(github_username, session_id, user_message, assistant_response):
+    dialogue_content = json.dumps({
+        "user": user_message,
+        "assistant": assistant_response
+    })
+    new_dialogue = Dialogue(github_username=github_username, session_id=session_id, content=dialogue_content)
+    db.session.add(new_dialogue)
+    db.session.commit()
+
+@app.route('/dialogues', methods=['GET'])
+@require_session
+def get_dialogues(github_username):
+    session_id = request.headers.get('X-Session-ID')
+    dialogues = Dialogue.query.filter_by(github_username=github_username, session_id=session_id).order_by(Dialogue.timestamp.desc()).all()
+    return jsonify([{
+        "id": d.id,
+        "timestamp": d.timestamp.isoformat(),
+        "content": json.loads(d.content)
+    } for d in dialogues])
+
+
+def load_prompt(filename):
+    with open(os.path.join('prompts', filename), 'r') as file:
+        return file.read().strip()
+
+
+def format_prompt(template, **kwargs):
+    return template.format(**kwargs)
+
+
+def generate_session_id():
+    return secrets.token_hex(16)
 
 
 assistant = Assistant(
@@ -155,9 +183,42 @@ def login():
     return jsonify({"session_id": session_id}), 200
 
 
+@app.route('/chat', methods=['POST'])
+@require_session
+def chat(github_username):
+    session_id = request.headers.get('X-Session-ID')
+    data = request.get_json()
+
+    if not data or 'message' not in data:
+        return jsonify({"error": "Invalid request. Message is required."}), 400
+
+    user_message = data['message']
+    context = data.get('context', '')  # Опциональный контекст (например, ID проблемы)
+
+    # Загрузка истории диалога для этой сессии
+    dialogues = Dialogue.query.filter_by(github_username=github_username, session_id=session_id).order_by(Dialogue.timestamp.desc()).limit(5).all()
+    dialogue_history = [json.loads(d.content) for d in dialogues][::-1]  # Инвертируем порядок
+
+    # Формирование промпта с историей диалога
+    prompt = f"Context: {context}\n\nDialogue History:\n"
+    for d in dialogue_history:
+        prompt += f"User: {d['user']}\nAssistant: {d['assistant']}\n"
+    prompt += f"\nUser: {user_message}\nAssistant:"
+
+    # Получение ответа от GPT
+    response = assistant.run(prompt, stream=False)
+
+    # Сохранение нового диалога
+    save_dialogue(github_username, session_id, user_message, response)
+
+    return jsonify({
+        "assistant_response": response
+    })
+
 @app.route('/problem', methods=['GET'])
 @require_session
 def problem(github_username):
+    session_id = request.headers.get('X-Session-ID')
     prompt = load_prompt('problem_generation.txt')
     response = assistant.run(prompt, stream=False)
     print(response)
@@ -172,7 +233,7 @@ def problem(github_username):
         id=problem_id,
         description=response_json.get("description", "").replace('\n', ' '),
         example_input=response_json.get("exampleInput", "").replace('\n', ' '),
-        example_output=respcreatedonse_json.get("exampleOutput", "").replace('\n', ' ')
+        example_output=response_json.get("exampleOutput", "").replace('\n', ' ')
     )
 
     db.session.add(new_problem)
@@ -182,7 +243,13 @@ def problem(github_username):
 
     db.session.commit()
 
-    return jsonify(new_problem.to_dict())
+    # Сохранение диалога с session_id
+    save_dialogue(github_username, session_id, "Generate a problem", json.dumps(response_json))
+
+    return jsonify({
+        "problem": new_problem.to_dict(),
+        "message": "If you want a different problem or have any questions, feel free to use the /chat endpoint."
+    })
 
 
 @app.route('/solution', methods=['POST'])
@@ -219,6 +286,17 @@ def solution(github_username):
     }
 
     return jsonify(solution_data)
+
+
+@app.route('/sessions', methods=['GET'])
+@require_session
+def get_sessions(github_username):
+    sessions = Session.query.filter_by(github_username=github_username).all()
+    return jsonify([{
+        "id": s.id,
+        "created_at": s.created_at.isoformat() if hasattr(s, 'created_at') else None
+    } for s in sessions])
+
 
 
 @app.route('/concept', methods=['POST'])
@@ -338,9 +416,6 @@ def get_concept(github_username, concept_id):
     }
 
     return jsonify(concept_data), 200
-
-
-from datetime import datetime
 
 
 @app.route('/concept/<concept_id>', methods=['PUT'])

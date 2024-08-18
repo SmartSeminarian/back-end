@@ -1,14 +1,11 @@
 import os
 
-basedir = os.path.abspath(os.path.dirname(__file__))
-
 class Config:
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'problems.db')
+    DATA_DIR = '/data'
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(DATA_DIR, 'problems.db')
     SQLALCHEMY_BINDS = {
-        'tokens': 'sqlite:///' + os.path.join(basedir, 'tokens.db')
+        'tokens': 'sqlite:///' + os.path.join(DATA_DIR, 'tokens.db')
     }
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SECRET_KEY = os.getenv('SECRET_KEY', 'default_secret_key')
 
     # Memgraph connection settings
     MEMGRAPH_HOST = os.getenv('MEMGRAPH_HOST', 'memgraph')
