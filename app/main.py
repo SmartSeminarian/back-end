@@ -24,7 +24,7 @@ app.instance_path = '/data'
 app.config.from_object(Config)
 db = SQLAlchemy(app)
 
-memgraph = Memgraph(host=os.getenv('MEMGRAPH_HOST'), port=int(os.getenv('MEMGRAPH_PORT')))
+memgraph = Memgraph(host=Config.MEMGRAPH_HOST, port=int(Config.MEMGRAPH_PORT))
 
 openai.api_key = 'sk-None-dLOf4WuJqVdFQ9mMEeTrT3BlbkFJKFvVW7eKSwE776nhGoGm'
 
@@ -58,6 +58,7 @@ class UserProblem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
     problem_id = db.Column(db.String(16), db.ForeignKey('problem.id'), nullable=False)
+    solution_code = db.Column(db.Text)
 
 class Problem(db.Model):
     id = db.Column(db.String(16), primary_key=True)
@@ -103,14 +104,17 @@ def require_session(f):
 
     return decorated_function
 
-def save_dialogue(github_username, session_id, user_message, assistant_response):
+def save_dialogue(github_username, session_id, user_message, assistant_response, context_type=None, context_id=None):
     dialogue_content = json.dumps({
         "user": user_message,
-        "assistant": assistant_response
+        "assistant": assistant_response,
+        "context_type": context_type,
+        "context_id": context_id
     })
     new_dialogue = Dialogue(github_username=github_username, session_id=session_id, content=dialogue_content)
     db.session.add(new_dialogue)
     db.session.commit()
+
 
 @app.route('/dialogues', methods=['GET'])
 @require_session
@@ -193,23 +197,46 @@ def chat(github_username):
         return jsonify({"error": "Invalid request. Message is required."}), 400
 
     user_message = data['message']
-    context = data.get('context', '')  # Опциональный контекст (например, ID проблемы)
+    context = data.get('context', {})
+    context_type = context.get('type')
+    context_id = context.get('id')
 
-    # Загрузка истории диалога для этой сессии
+    # Load dialogue history for this session
     dialogues = Dialogue.query.filter_by(github_username=github_username, session_id=session_id).order_by(Dialogue.timestamp.desc()).limit(5).all()
-    dialogue_history = [json.loads(d.content) for d in dialogues][::-1]  # Инвертируем порядок
+    dialogue_history = [json.loads(d.content) for d in dialogues][::-1]  # Reverse the order
 
-    # Формирование промпта с историей диалога
-    prompt = f"Context: {context}\n\nDialogue History:\n"
+    # Formulate prompt with context
+    prompt = ""
+
+    if context_type and context_id:
+        prompt += f"Context: {context_type} {context_id}\n\n"
+
+        if context_type == 'problem':
+            problem = Problem.query.get(context_id)
+            if problem:
+                prompt += f"Problem: {problem.description}\n"
+                prompt += f"Example Input: {problem.example_input}\n"
+                prompt += f"Example Output: {problem.example_output}\n\n"
+        elif context_type == 'solution':
+            user_problem = UserProblem.query.filter_by(github_username=github_username, problem_id=context_id).first()
+            if user_problem and user_problem.solution_code:
+                problem = Problem.query.get(context_id)
+                if problem:
+                    prompt += f"Problem: {problem.description}\n"
+                    prompt += f"Your previous solution: {user_problem.solution_code}\n\n"
+    else:
+        prompt += "General Chat\n\n"
+
+    prompt += "Dialogue History:\n"
     for d in dialogue_history:
         prompt += f"User: {d['user']}\nAssistant: {d['assistant']}\n"
     prompt += f"\nUser: {user_message}\nAssistant:"
 
-    # Получение ответа от GPT
+    # Get response from GPT
     response = assistant.run(prompt, stream=False)
 
-    # Сохранение нового диалога
-    save_dialogue(github_username, session_id, user_message, response)
+    # Save the new dialogue
+    save_dialogue(github_username, session_id, user_message, response, context_type, context_id)
 
     return jsonify({
         "assistant_response": response
@@ -243,8 +270,8 @@ def problem(github_username):
 
     db.session.commit()
 
-    # Сохранение диалога с session_id
-    save_dialogue(github_username, session_id, "Generate a problem", json.dumps(response_json))
+    # Save the dialogue with session_id and context
+    save_dialogue(github_username, session_id, "Generate a problem", json.dumps(response_json), 'problem', problem_id)
 
     return jsonify({
         "problem": new_problem.to_dict(),
@@ -255,6 +282,7 @@ def problem(github_username):
 @app.route('/solution', methods=['POST'])
 @require_session
 def solution(github_username):
+    session_id = request.headers.get('X-Session-ID')
     data = request.get_json()
 
     if not data or 'problemId' not in data or 'solutionCode' not in data:
@@ -265,7 +293,11 @@ def solution(github_username):
 
     user_problem = UserProblem.query.filter_by(github_username=github_username, problem_id=problem_id).first()
     if not user_problem:
-        return jsonify({"error": "Problem not found or not associated with user"}), 404
+        user_problem = UserProblem(github_username=github_username, problem_id=problem_id)
+        db.session.add(user_problem)
+
+    user_problem.solution_code = solution_code
+    db.session.commit()
 
     problem = Problem.query.get(problem_id)
     if not problem:
@@ -280,12 +312,19 @@ def solution(github_username):
 
     response = assistant.run(prompt, stream=False)
 
+    # Save the dialogue with session_id and context
+    save_dialogue(github_username, session_id, f"Solution submitted for problem {problem_id}: {solution_code}",
+                  response, 'solution', problem_id)
+
     solution_data = {
         "problemId": problem_id,
         "evaluation": response.replace('\n', ' '),
     }
 
-    return jsonify(solution_data)
+    return jsonify({
+        "evaluation": solution_data,
+        "message": "You can continue discussing this solution using the /chat endpoint with the 'solution' context."
+    })
 
 
 @app.route('/sessions', methods=['GET'])
