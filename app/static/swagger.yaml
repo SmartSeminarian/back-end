@@ -516,6 +516,118 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /chat:
+    post:
+      summary: Send a chat message
+      security:
+        - SessionAuth: [ ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                context:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [ problem, solution ]
+                    id:
+                      type: string
+              required:
+                - message
+      responses:
+        '200':
+          description: Chat response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assistant_response:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sessions:
+    get:
+      summary: Get user sessions
+      security:
+        - SessionAuth: [ ]
+      responses:
+        '200':
+          description: List of user sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    created_at:
+                      type: string
+                      format: date-time
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dialogues:
+    get:
+      summary: Get user dialogues
+      security:
+        - SessionAuth: [ ]
+      responses:
+        '200':
+          description: List of user dialogues
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    timestamp:
+                      type: string
+                      format: date-time
+                    content:
+                      type: object
+                      properties:
+                        user:
+                          type: string
+                        assistant:
+                          type: string
+                        context_type:
+                          type: string
+                        context_id:
+                          type: string
+        '401':
+          description: Unauthorized - Invalid or missing session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 
 components:
   securitySchemes:
