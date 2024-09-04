@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test Dashboard</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#run-tests').click(function() {
+                $.get('/run_tests', function(data) {
+                    let resultsHtml = '<ul>';
+                    data.results.forEach(function(test) {
+                        resultsHtml += `<li>${test.name}: ${test.result}</li>`;
+                    });
+                    resultsHtml += '</ul>';
+                    $('#results').html(resultsHtml);
+                    $('#output').text(data.output);
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+    <h1>API Test Dashboard</h1>
+    <button id="run-tests">Run Tests</button>
+    <div id="results"></div>
+    <pre id="output"></pre>
+</body>
+</html>

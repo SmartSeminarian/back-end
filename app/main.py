@@ -15,11 +15,11 @@ import uuid
 import openai
 from gqlalchemy import Memgraph
 from gqlalchemy import Node, Field
-
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
-app.instance_path = '/tmp'
+app.instance_path = '/data'
 
 app.config.from_object(Config)
 db = SQLAlchemy(app)
@@ -58,6 +58,7 @@ class UserProblem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
     problem_id = db.Column(db.String(16), db.ForeignKey('problem.id'), nullable=False)
+    solution_code = db.Column(db.Text)
 
 class Problem(db.Model):
     id = db.Column(db.String(16), primary_key=True)
@@ -79,18 +80,13 @@ class Concept(Node):
     description: str = Field()
     difficulty: int = Field()
 
-def load_prompt(filename):
-    with open(os.path.join('prompts', filename), 'r') as file:
-        return file.read().strip()
 
-
-def format_prompt(template, **kwargs):
-    return template.format(**kwargs)
-
-
-def generate_session_id():
-    return secrets.token_hex(16)
-
+class Dialogue(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
+    session_id = db.Column(db.String(32), db.ForeignKey('session.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    content = db.Column(db.Text, nullable=False)
 
 def require_session(f):
     @wraps(f)
@@ -107,6 +103,42 @@ def require_session(f):
         return f(*args, **kwargs)
 
     return decorated_function
+
+def save_dialogue(github_username, session_id, user_message, assistant_response, context_type=None, context_id=None):
+    dialogue_content = json.dumps({
+        "user": user_message,
+        "assistant": assistant_response,
+        "context_type": context_type,
+        "context_id": context_id
+    })
+    new_dialogue = Dialogue(github_username=github_username, session_id=session_id, content=dialogue_content)
+    db.session.add(new_dialogue)
+    db.session.commit()
+
+
+@app.route('/dialogues', methods=['GET'])
+@require_session
+def get_dialogues(github_username):
+    session_id = request.headers.get('X-Session-ID')
+    dialogues = Dialogue.query.filter_by(github_username=github_username, session_id=session_id).order_by(Dialogue.timestamp.desc()).all()
+    return jsonify([{
+        "id": d.id,
+        "timestamp": d.timestamp.isoformat(),
+        "content": json.loads(d.content)
+    } for d in dialogues])
+
+
+def load_prompt(filename):
+    with open(os.path.join('prompts', filename), 'r') as file:
+        return file.read().strip()
+
+
+def format_prompt(template, **kwargs):
+    return template.format(**kwargs)
+
+
+def generate_session_id():
+    return secrets.token_hex(16)
 
 
 assistant = Assistant(
@@ -155,9 +187,65 @@ def login():
     return jsonify({"session_id": session_id}), 200
 
 
+@app.route('/chat', methods=['POST'])
+@require_session
+def chat(github_username):
+    session_id = request.headers.get('X-Session-ID')
+    data = request.get_json()
+
+    if not data or 'message' not in data:
+        return jsonify({"error": "Invalid request. Message is required."}), 400
+
+    user_message = data['message']
+    context = data.get('context', {})
+    context_type = context.get('type')
+    context_id = context.get('id')
+
+    # Load dialogue history for this session
+    dialogues = Dialogue.query.filter_by(github_username=github_username, session_id=session_id).order_by(Dialogue.timestamp.desc()).limit(5).all()
+    dialogue_history = [json.loads(d.content) for d in dialogues][::-1]  # Reverse the order
+
+    # Formulate prompt with context
+    prompt = ""
+
+    if context_type and context_id:
+        prompt += f"Context: {context_type} {context_id}\n\n"
+
+        if context_type == 'problem':
+            problem = Problem.query.get(context_id)
+            if problem:
+                prompt += f"Problem: {problem.description}\n"
+                prompt += f"Example Input: {problem.example_input}\n"
+                prompt += f"Example Output: {problem.example_output}\n\n"
+        elif context_type == 'solution':
+            user_problem = UserProblem.query.filter_by(github_username=github_username, problem_id=context_id).first()
+            if user_problem and user_problem.solution_code:
+                problem = Problem.query.get(context_id)
+                if problem:
+                    prompt += f"Problem: {problem.description}\n"
+                    prompt += f"Your previous solution: {user_problem.solution_code}\n\n"
+    else:
+        prompt += "General Chat\n\n"
+
+    prompt += "Dialogue History:\n"
+    for d in dialogue_history:
+        prompt += f"User: {d['user']}\nAssistant: {d['assistant']}\n"
+    prompt += f"\nUser: {user_message}\nAssistant:"
+
+    # Get response from GPT
+    response = assistant.run(prompt, stream=False)
+
+    # Save the new dialogue
+    save_dialogue(github_username, session_id, user_message, response, context_type, context_id)
+
+    return jsonify({
+        "assistant_response": response
+    })
+
 @app.route('/problem', methods=['GET'])
 @require_session
 def problem(github_username):
+    session_id = request.headers.get('X-Session-ID')
     prompt = load_prompt('problem_generation.txt')
     response = assistant.run(prompt, stream=False)
     print(response)
@@ -182,12 +270,19 @@ def problem(github_username):
 
     db.session.commit()
 
-    return jsonify(new_problem.to_dict())
+    # Save the dialogue with session_id and context
+    save_dialogue(github_username, session_id, "Generate a problem", json.dumps(response_json), 'problem', problem_id)
+
+    return jsonify({
+        "problem": new_problem.to_dict(),
+        "message": "If you want a different problem or have any questions, feel free to use the /chat endpoint."
+    })
 
 
 @app.route('/solution', methods=['POST'])
 @require_session
 def solution(github_username):
+    session_id = request.headers.get('X-Session-ID')
     data = request.get_json()
 
     if not data or 'problemId' not in data or 'solutionCode' not in data:
@@ -198,7 +293,11 @@ def solution(github_username):
 
     user_problem = UserProblem.query.filter_by(github_username=github_username, problem_id=problem_id).first()
     if not user_problem:
-        return jsonify({"error": "Problem not found or not associated with user"}), 404
+        user_problem = UserProblem(github_username=github_username, problem_id=problem_id)
+        db.session.add(user_problem)
+
+    user_problem.solution_code = solution_code
+    db.session.commit()
 
     problem = Problem.query.get(problem_id)
     if not problem:
@@ -213,12 +312,30 @@ def solution(github_username):
 
     response = assistant.run(prompt, stream=False)
 
+    # Save the dialogue with session_id and context
+    save_dialogue(github_username, session_id, f"Solution submitted for problem {problem_id}: {solution_code}",
+                  response, 'solution', problem_id)
+
     solution_data = {
         "problemId": problem_id,
         "evaluation": response.replace('\n', ' '),
     }
 
-    return jsonify(solution_data)
+    return jsonify({
+        "evaluation": solution_data,
+        "message": "You can continue discussing this solution using the /chat endpoint with the 'solution' context."
+    })
+
+
+@app.route('/sessions', methods=['GET'])
+@require_session
+def get_sessions(github_username):
+    sessions = Session.query.filter_by(github_username=github_username).all()
+    return jsonify([{
+        "id": s.id,
+        "created_at": s.created_at.isoformat() if hasattr(s, 'created_at') else None
+    } for s in sessions])
+
 
 
 @app.route('/concept', methods=['POST'])
@@ -340,9 +457,6 @@ def get_concept(github_username, concept_id):
     return jsonify(concept_data), 200
 
 
-from datetime import datetime
-
-
 @app.route('/concept/<concept_id>', methods=['PUT'])
 @require_session
 def update_concept(github_username, concept_id):
@@ -396,12 +510,11 @@ def update_concept(github_username, concept_id):
         if not new_concept:
             raise Exception("Failed to create new version of concept")
 
-        # Update relationships to point to the new version
         update_relations_query = """
-        MATCH (old:Concept {id: $old_id})<-[r]-()
+        MATCH (old:Concept {id: $old_id})-[r:RELATED]->(target)
         WHERE NOT type(r) = 'PREVIOUS_VERSION'
         MATCH (new:Concept {id: $new_id})
-        CREATE (new)<-[new_r]-()
+        CREATE (new)-[new_r:RELATED]->(target)
         SET new_r = r
         DELETE r
         """
@@ -422,6 +535,93 @@ def update_concept(github_username, concept_id):
         error_message = f"Failed to update concept. Error: {str(e)}"
         print(error_message)  # Log the error
         return jsonify({"error": error_message}), 500
+
+
+@app.route('/concept/bind', methods=['POST'])
+@require_session
+def bind_concepts(github_username):
+    data = request.json
+    if not data or 'source_id' not in data or 'target_id' not in data or 'relation' not in data:
+        return jsonify({"error": "Invalid request. Required fields: source_id, target_id, relation"}), 400
+
+    source_id = data['source_id']
+    target_id = data['target_id']
+    relation = data['relation']
+
+    query = """
+    MATCH (source:Concept {id: $source_id})
+    MATCH (target:Concept {id: $target_id})
+    WHERE source <> target
+    CREATE (source)-[r:RELATED {type: $relation}]->(target)
+    RETURN source.id as source_id, target.id as target_id, type(r) as relation_type, r.type as relation
+    """
+
+    try:
+        result = memgraph.execute_and_fetch(query,
+                                            {"source_id": source_id, "target_id": target_id, "relation": relation})
+        created_relation = next(result, None)
+
+        if not created_relation:
+            raise Exception("Failed to create relation between concepts")
+
+        return jsonify({
+            "source_id": created_relation['source_id'],
+            "target_id": created_relation['target_id'],
+            "relation_type": created_relation['relation_type'],
+            "relation": created_relation['relation']
+        }), 201
+
+    except Exception as e:
+        error_message = f"Failed to bind concepts. Error: {str(e)}"
+        print(error_message)  # Log the error
+        return jsonify({"error": error_message}), 500
+
+
+@app.route('/concept/unbind', methods=['POST'])
+@require_session
+def unbind_concepts(github_username):
+    data = request.json
+    if not data or 'source_id' not in data or 'target_id' not in data:
+        return jsonify({"error": "Invalid request. Required fields: source_id, target_id"}), 400
+
+    source_id = data['source_id']
+    target_id = data['target_id']
+    relation = data.get('relation')  # Optional: if provided, only unbind this specific relation
+
+    query = """
+    MATCH (source:Concept {id: $source_id})-[r:RELATED]->(target:Concept {id: $target_id})
+    WHERE source <> target
+    """
+
+    if relation:
+        query += "AND r.type = $relation "
+
+    query += """
+    WITH r, source, target
+    DELETE r
+    RETURN source.id as source_id, target.id as target_id, 'RELATED' as relation_type
+    """
+
+    try:
+        result = memgraph.execute_and_fetch(query,
+                                            {"source_id": source_id, "target_id": target_id, "relation": relation})
+        deleted_relations = list(result)
+
+        if not deleted_relations:
+            return jsonify({"error": "No matching relations found to unbind"}), 404
+
+        return jsonify([{
+            "source_id": rel['source_id'],
+            "target_id": rel['target_id'],
+            "relation_type": rel['relation_type'],
+            "relation": relation if relation else "is_related_to"
+        } for rel in deleted_relations]), 200
+
+    except Exception as e:
+        error_message = f"Failed to unbind concepts. Error: {str(e)}"
+        print(error_message)  # Log the error
+        return jsonify({"error": error_message}), 500
+
 
 @app.route('/version', methods=['GET'])
 def version():

@@ -1,0 +1,12 @@
+FROM python:3.9
+
+ENV LISTEN_PORT=5001
+EXPOSE 5001
+
+WORKDIR /tests
+
+COPY ./app/tests /tests
+
+RUN pip install flask pytest requests
+
+CMD ["python3", "test_dashboard.py"]
