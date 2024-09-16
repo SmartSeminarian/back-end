@@ -5,4 +5,7 @@
 ### branches and names
  - stage api-stage.csai.site
  - prod  api.csai.site
- - cicd-workflow debug branch 
+ - cicd-workflow debug branch
+
+### version
+0.1
