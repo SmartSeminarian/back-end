@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_swagger_ui import get_swaggerui_blueprint
 from flask_cors import CORS
@@ -16,6 +16,9 @@ import openai
 from gqlalchemy import Memgraph
 from gqlalchemy import Node, Field
 from datetime import datetime
+import subprocess
+import sys
+import io
 
 app = Flask(__name__)
 CORS(app)
@@ -26,7 +29,7 @@ db = SQLAlchemy(app)
 
 memgraph = Memgraph(host=Config.MEMGRAPH_HOST, port=int(Config.MEMGRAPH_PORT))
 
-openai.api_key = 'sk-None-dLOf4WuJqVdFQ9mMEeTrT3BlbkFJKFvVW7eKSwE776nhGoGm'
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 SWAGGER_URL = '/api/docs'
 API_URL = '/static/swagger.yaml'
@@ -627,12 +630,11 @@ def unbind_concepts(github_username):
 def version():
     return jsonify({'version': '0.0.1'})
 
-
 with app.app_context():
     db.create_all()
     existing_token = Token.query.filter_by(token_name='test').first()
     if not existing_token:
-        test_token = Token(token_name='test', token='VongOahophufshepwucsimyig5ogukir')
+        test_token = Token(token_name='test', token=os.environ.get('TEST_TOKEN'))
         db.session.add(test_token)
         db.session.commit()
 
