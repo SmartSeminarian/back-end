@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_swagger_ui import get_swaggerui_blueprint
 from flask_cors import CORS
@@ -626,6 +626,16 @@ def unbind_concepts(github_username):
 @app.route('/version', methods=['GET'])
 def version():
     return jsonify({'version': '0.0.1'})
+
+
+@app.route('/logs')
+def get_logs():
+    log_file_path = '/data/service.log'
+
+    if os.path.exists(log_file_path):
+        return send_file(log_file_path, mimetype='text/plain', as_attachment=True)
+    else:
+        return "Log file not found", 404
 
 
 with app.app_context():
