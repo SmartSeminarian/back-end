@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string, send_from_directory, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_swagger_ui import get_swaggerui_blueprint
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from functools import wraps
 import logging
 import os
@@ -21,7 +21,7 @@ import sys
 import io
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, support_credentials=True)
 app.instance_path = '/data'
 
 app.config.from_object(Config)
@@ -29,7 +29,6 @@ db = SQLAlchemy(app)
 
 memgraph = Memgraph(host=Config.MEMGRAPH_HOST, port=int(Config.MEMGRAPH_PORT))
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 SWAGGER_URL = '/api/docs'
 API_URL = '/static/swagger.yaml'
@@ -158,6 +157,7 @@ def index():
 
 
 @app.route('/login', methods=['POST'])
+@cross_origin(supports_credentials=True)
 def login():
     data = request.get_json()
     if not data or 'github_username' not in data or 'token' not in data:
@@ -645,7 +645,7 @@ with app.app_context():
     db.create_all()
     existing_token = Token.query.filter_by(token_name='test').first()
     if not existing_token:
-        test_token = Token(token_name='test', token=os.environ.get('TEST_TOKEN'))
+        test_token = Token(token_name='test', token=os.getenv('TEST_TOKEN'))
         db.session.add(test_token)
         db.session.commit()
 

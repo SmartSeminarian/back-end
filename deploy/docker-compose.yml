@@ -25,7 +25,7 @@ services:
 #UNCOMMENT_ME_FOR_DEV      context: .
 #UNCOMMENT_ME_FOR_DEV      dockerfile: ./Dockerfile
     ports:
-      - "5000:5000"
+      - "5050:5050"
     depends_on:
       - memgraph
     env_file:
