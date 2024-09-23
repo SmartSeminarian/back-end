@@ -55,6 +55,7 @@ class User(db.Model):
 class Session(db.Model):
     id = db.Column(db.String(32), primary_key=True)
     github_username = db.Column(db.String(100), db.ForeignKey('user.github_username'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class UserProblem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -121,13 +122,28 @@ def save_dialogue(github_username, session_id, user_message, assistant_response,
 @app.route('/dialogues', methods=['GET'])
 @require_session
 def get_dialogues(github_username):
-    session_id = request.headers.get('X-Session-ID')
-    dialogues = Dialogue.query.filter_by(github_username=github_username, session_id=session_id).order_by(Dialogue.timestamp.desc()).all()
-    return jsonify([{
-        "id": d.id,
-        "timestamp": d.timestamp.isoformat(),
-        "content": json.loads(d.content)
-    } for d in dialogues])
+    # Get all sessions for the user
+    sessions = Session.query.filter_by(github_username=github_username).order_by(Session.created_at.desc()).all()
+
+    result = []
+
+    for session in sessions:
+        dialogues = Dialogue.query.filter_by(github_username=github_username, session_id=session.id).order_by(
+            Dialogue.timestamp.asc()).all()
+
+        session_data = {
+            "session_id": session.id,
+            "created_at": session.created_at.isoformat(),
+            "dialogues": [{
+                "id": d.id,
+                "timestamp": d.timestamp.isoformat(),
+                "content": json.loads(d.content)
+            } for d in dialogues]
+        }
+
+        result.append(session_data)
+
+    return jsonify(result)
 
 
 def load_prompt(filename):
