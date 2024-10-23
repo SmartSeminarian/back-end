@@ -5,3 +5,5 @@ Provide your response in the following JSON format:
     "exampleInput": "Example input here",
     "exampleOutput": "Example output here"
 }
+
+In input and output dont;t use words "input" and "output", send only raw data

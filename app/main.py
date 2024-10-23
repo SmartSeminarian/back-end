@@ -282,6 +282,49 @@ def problem(github_username):
     })
 
 
+@app.route('/user/problems', methods=['GET'])
+@require_session
+def get_user_problems(github_username):
+    try:
+        user_problems = (
+            db.session.query(
+                Problem,
+                UserProblem.solution_code,
+                UserProblem.id.label('user_problem_id')
+            )
+            .join(
+                UserProblem,
+                (UserProblem.problem_id == Problem.id) &
+                (UserProblem.github_username == github_username)
+            )
+            .all()
+        )
+
+        problems_list = []
+        for problem, solution_code, user_problem_id in user_problems:
+            problem_data = {
+                "id": problem.id,
+                "description": problem.description,
+                "exampleInput": problem.example_input,
+                "exampleOutput": problem.example_output,
+                "userProblemId": user_problem_id,
+                "hasSubmission": solution_code is not None,
+                "solutionCode": solution_code if solution_code else None
+            }
+            problems_list.append(problem_data)
+
+        return jsonify({
+            "problems": problems_list,
+            "totalCount": len(problems_list)
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"Error fetching user problems: {str(e)}")
+        return jsonify({
+            "error": "Failed to fetch user problems",
+            "details": str(e)
+        }), 500
+
 @app.route('/solution', methods=['POST'])
 @require_session
 def solution(github_username):
