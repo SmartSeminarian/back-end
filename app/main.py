@@ -29,7 +29,6 @@ db = SQLAlchemy(app)
 
 memgraph = Memgraph(host=Config.MEMGRAPH_HOST, port=int(Config.MEMGRAPH_PORT))
 
-
 SWAGGER_URL = '/api/docs'
 API_URL = '/static/swagger.yaml'
 
