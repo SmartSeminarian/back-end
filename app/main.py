@@ -148,7 +148,6 @@ assistant = Assistant(
 )
 
 
-
 @app.route('/')
 def index():
     return "Phidata Agent is running"
