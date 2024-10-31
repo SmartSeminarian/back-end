@@ -42,7 +42,6 @@ swaggerui_blueprint = get_swaggerui_blueprint(
 
 app.register_blueprint(swaggerui_blueprint)
 
-
 class Token(db.Model):
     __bind_key__ = 'tokens'
     token_name = db.Column(db.String(50), primary_key=True)
