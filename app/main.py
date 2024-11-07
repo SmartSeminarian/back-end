@@ -24,7 +24,6 @@ import io
 app = Flask(__name__)
 CORS(app, support_credentials=True)
 app.instance_path = '/data'
-
 app.config.from_object(Config)
 db = SQLAlchemy(app)
 
