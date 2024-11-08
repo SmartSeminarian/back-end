@@ -79,6 +79,7 @@ class Concept(Node):
     name: str = Field()
     description: str = Field()
     difficulty: int = Field()
+    owner: str = Field()
 
 
 class Dialogue(db.Model):
@@ -392,23 +393,24 @@ def create_concept(github_username):
     description = data.get('description')
     difficulty = data.get('difficulty', 1)
 
-    # Check if concept already exists
-    query = "MATCH (c:Concept {name: $name}) RETURN c"
-    result = memgraph.execute_and_fetch(query, {"name": name})
+    # Check if concept already exists for this user
+    query = "MATCH (c:Concept {name: $name, owner: $owner}) RETURN c"
+    result = memgraph.execute_and_fetch(query, {"name": name, "owner": github_username})
     if next(result, None):
-        return jsonify({"error": "Concept with this name already exists"}), 409
+        return jsonify({"error": "Concept with this name already exists for this user"}), 409
 
-    # Create new concept
+    # Create new concept with owner
     new_concept_id = str(uuid.uuid4())
     query = (
-        "CREATE (c:Concept {id: $id, name: $name, description: $description, difficulty: $difficulty}) "
-        "RETURN c"
+        "CREATE (c:Concept {id: $id, name: $name, description: $description, "
+        "difficulty: $difficulty, owner: $owner}) RETURN c"
     )
     params = {
         "id": new_concept_id,
         "name": name,
         "description": description,
-        "difficulty": difficulty
+        "difficulty": difficulty,
+        "owner": github_username
     }
 
     try:
@@ -417,41 +419,56 @@ def create_concept(github_username):
         if not created_concept:
             raise Exception("No result returned from create query")
 
-        # Access the node properties directly
         concept_node = created_concept['c']
         concept_data = {
             "id": concept_node.id,
             "name": concept_node.name,
             "description": concept_node.description,
-            "difficulty": concept_node.difficulty
+            "difficulty": concept_node.difficulty,
+            "owner": concept_node.owner
         }
         return jsonify(concept_data), 201
     except Exception as e:
         error_message = f"Failed to create concept. Error: {str(e)}"
         print(error_message)
-
-        check_query = "MATCH (c:Concept {name: $name}) RETURN c"
-        check_result = memgraph.execute_and_fetch(check_query, {"name": name})
-        if next(check_result, None):
-            error_message += " However, the concept appears to have been created in the database."
-
         return jsonify({"error": error_message}), 500
 
 
 @app.route('/concept', methods=['GET'])
 @require_session
 def get_all_concepts(github_username):
-    query = "MATCH (c:Concept) RETURN c"
-    result = memgraph.execute_and_fetch(query)
+    # Modified query to include relationships
+    query = """
+    MATCH (c:Concept)
+    WHERE c.owner = $owner
+    OPTIONAL MATCH (c)-[r:RELATED]->(related:Concept)
+    WHERE related.owner = $owner
+    RETURN c,
+           COLLECT(DISTINCT {
+               id: related.id,
+               name: related.name,
+               description: related.description,
+               difficulty: related.difficulty,
+               relation: r.type
+           }) as outgoing_relations,
+           size(COLLECT(DISTINCT related)) as related_count
+    """
+    result = memgraph.execute_and_fetch(query, {"owner": github_username})
 
     concepts = []
     for record in result:
         concept_node = record['c']
+        # Filter out empty relationships
+        related_concepts = [rel for rel in record['outgoing_relations'] if rel['id'] is not None]
+
         concepts.append({
             "id": concept_node.id,
             "name": concept_node.name,
             "description": concept_node.description,
-            "difficulty": concept_node.difficulty
+            "difficulty": concept_node.difficulty,
+            "owner": concept_node.owner,
+            "related_concepts": related_concepts,
+            "related_count": record['related_count']
         })
 
     return jsonify(concepts), 200
@@ -460,41 +477,69 @@ def get_all_concepts(github_username):
 @app.route('/concept/<concept_id>', methods=['DELETE'])
 @require_session
 def delete_concept(github_username, concept_id):
-    # Check if concept exists
-    query = "MATCH (c:Concept {id: $id}) RETURN c"
-    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    # Check if concept exists and belongs to user
+    query = """
+    MATCH (c:Concept {id: $id})
+    WHERE c.owner = $owner
+    RETURN c
+    """
+    result = memgraph.execute_and_fetch(query, {"id": concept_id, "owner": github_username})
     concept = next(result, None)
 
     if not concept:
-        return jsonify({"error": "Concept not found"}), 404
+        return jsonify({"error": "Concept not found or unauthorized access"}), 404
 
     # Delete the concept
-    delete_query = "MATCH (c:Concept {id: $id}) DETACH DELETE c"
+    delete_query = """
+    MATCH (c:Concept {id: $id, owner: $owner})
+    DETACH DELETE c
+    """
     try:
-        memgraph.execute(delete_query, {"id": concept_id})
+        memgraph.execute(delete_query, {"id": concept_id, "owner": github_username})
         return jsonify({"message": "Concept deleted successfully"}), 200
     except Exception as e:
         error_message = f"Failed to delete concept. Error: {str(e)}"
-        print(error_message)  # Log the error
+        print(error_message)
         return jsonify({"error": error_message}), 500
 
 
 @app.route('/concept/<concept_id>', methods=['GET'])
 @require_session
 def get_concept(github_username, concept_id):
-    query = "MATCH (c:Concept {id: $id}) RETURN c"
-    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    # Modified query to fetch concept and its relationships
+    query = """
+    MATCH (c:Concept {id: $id})
+    WHERE c.owner = $owner
+    OPTIONAL MATCH (c)-[r:RELATED]->(related:Concept)
+    WHERE related.owner = $owner
+    RETURN c,
+           COLLECT(DISTINCT {
+               id: related.id,
+               name: related.name,
+               description: related.description,
+               difficulty: related.difficulty,
+               relation: r.type
+           }) as outgoing_relations,
+           size(COLLECT(DISTINCT related)) as related_count
+    """
+    result = memgraph.execute_and_fetch(query, {"id": concept_id, "owner": github_username})
     concept = next(result, None)
 
     if not concept:
-        return jsonify({"error": "Concept not found"}), 404
+        return jsonify({"error": "Concept not found or unauthorized access"}), 404
 
     concept_node = concept['c']
+    # Filter out empty relationships (when there are no related concepts)
+    related_concepts = [rel for rel in concept['outgoing_relations'] if rel['id'] is not None]
+
     concept_data = {
         "id": concept_node.id,
         "name": concept_node.name,
         "description": concept_node.description,
-        "difficulty": concept_node.difficulty
+        "difficulty": concept_node.difficulty,
+        "owner": concept_node.owner,
+        "related_concepts": related_concepts,
+        "related_count": concept['related_count']
     }
 
     return jsonify(concept_data), 200
@@ -507,13 +552,17 @@ def update_concept(github_username, concept_id):
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    # Check if the concept exists
-    query = "MATCH (c:Concept {id: $id}) RETURN c"
-    result = memgraph.execute_and_fetch(query, {"id": concept_id})
+    # Check if the concept exists and belongs to the user
+    query = """
+    MATCH (c:Concept {id: $id})
+    WHERE c.owner = $owner
+    RETURN c
+    """
+    result = memgraph.execute_and_fetch(query, {"id": concept_id, "owner": github_username})
     old_concept = next(result, None)
 
     if not old_concept:
-        return jsonify({"error": "Concept not found"}), 404
+        return jsonify({"error": "Concept not found or unauthorized access"}), 404
 
     old_concept_node = old_concept['c']
 
@@ -528,10 +577,11 @@ def update_concept(github_username, concept_id):
         description: $description,
         difficulty: $difficulty,
         version: $version,
-        created_at: $created_at
+        created_at: $created_at,
+        owner: $owner
     })
     WITH new
-    MATCH (old:Concept {id: $old_id})
+    MATCH (old:Concept {id: $old_id, owner: $owner})
     CREATE (new)-[:PREVIOUS_VERSION]->(old)
     RETURN new
     """
@@ -543,7 +593,8 @@ def update_concept(github_username, concept_id):
         "difficulty": data.get('difficulty', old_concept_node.difficulty),
         "version": new_version,
         "created_at": datetime.utcnow().isoformat(),
-        "old_id": concept_id
+        "old_id": concept_id,
+        "owner": github_username
     }
 
     try:
@@ -553,15 +604,20 @@ def update_concept(github_username, concept_id):
         if not new_concept:
             raise Exception("Failed to create new version of concept")
 
+        # Update relations to maintain the same relationships with the new version
         update_relations_query = """
-        MATCH (old:Concept {id: $old_id})-[r:RELATED]->(target)
+        MATCH (old:Concept {id: $old_id, owner: $owner})-[r:RELATED]->(target)
         WHERE NOT type(r) = 'PREVIOUS_VERSION'
-        MATCH (new:Concept {id: $new_id})
+        MATCH (new:Concept {id: $new_id, owner: $owner})
         CREATE (new)-[new_r:RELATED]->(target)
         SET new_r = r
         DELETE r
         """
-        memgraph.execute(update_relations_query, {"old_id": concept_id, "new_id": new_concept_id})
+        memgraph.execute(update_relations_query, {
+            "old_id": concept_id,
+            "new_id": new_concept_id,
+            "owner": github_username
+        })
 
         new_concept_data = {
             "id": new_concept['new'].id,
@@ -569,16 +625,16 @@ def update_concept(github_username, concept_id):
             "description": new_concept['new'].description,
             "difficulty": new_concept['new'].difficulty,
             "version": new_concept['new'].version,
-            "created_at": new_concept['new'].created_at
+            "created_at": new_concept['new'].created_at,
+            "owner": new_concept['new'].owner
         }
 
         return jsonify(new_concept_data), 200
 
     except Exception as e:
         error_message = f"Failed to update concept. Error: {str(e)}"
-        print(error_message)  # Log the error
+        print(error_message)
         return jsonify({"error": error_message}), 500
-
 
 @app.route('/concept/bind', methods=['POST'])
 @require_session
@@ -591,21 +647,28 @@ def bind_concepts(github_username):
     target_id = data['target_id']
     relation = data['relation']
 
+    # Modified query to check ownership of both concepts
     query = """
     MATCH (source:Concept {id: $source_id})
     MATCH (target:Concept {id: $target_id})
-    WHERE source <> target
+    WHERE source <> target 
+    AND source.owner = $owner 
+    AND target.owner = $owner
     CREATE (source)-[r:RELATED {type: $relation}]->(target)
     RETURN source.id as source_id, target.id as target_id, type(r) as relation_type, r.type as relation
     """
 
     try:
-        result = memgraph.execute_and_fetch(query,
-                                            {"source_id": source_id, "target_id": target_id, "relation": relation})
+        result = memgraph.execute_and_fetch(query, {
+            "source_id": source_id,
+            "target_id": target_id,
+            "relation": relation,
+            "owner": github_username
+        })
         created_relation = next(result, None)
 
         if not created_relation:
-            raise Exception("Failed to create relation between concepts")
+            return jsonify({"error": "Concepts not found or unauthorized access"}), 404
 
         return jsonify({
             "source_id": created_relation['source_id'],
@@ -616,9 +679,8 @@ def bind_concepts(github_username):
 
     except Exception as e:
         error_message = f"Failed to bind concepts. Error: {str(e)}"
-        print(error_message)  # Log the error
+        print(error_message)
         return jsonify({"error": error_message}), 500
-
 
 @app.route('/concept/unbind', methods=['POST'])
 @require_session
@@ -631,9 +693,12 @@ def unbind_concepts(github_username):
     target_id = data['target_id']
     relation = data.get('relation')  # Optional: if provided, only unbind this specific relation
 
+    # Modified query to check ownership of both concepts
     query = """
     MATCH (source:Concept {id: $source_id})-[r:RELATED]->(target:Concept {id: $target_id})
-    WHERE source <> target
+    WHERE source <> target 
+    AND source.owner = $owner 
+    AND target.owner = $owner
     """
 
     if relation:
@@ -646,12 +711,16 @@ def unbind_concepts(github_username):
     """
 
     try:
-        result = memgraph.execute_and_fetch(query,
-                                            {"source_id": source_id, "target_id": target_id, "relation": relation})
+        result = memgraph.execute_and_fetch(query, {
+            "source_id": source_id,
+            "target_id": target_id,
+            "relation": relation,
+            "owner": github_username
+        })
         deleted_relations = list(result)
 
         if not deleted_relations:
-            return jsonify({"error": "No matching relations found to unbind"}), 404
+            return jsonify({"error": "No matching relations found to unbind or unauthorized access"}), 404
 
         return jsonify([{
             "source_id": rel['source_id'],
@@ -662,7 +731,7 @@ def unbind_concepts(github_username):
 
     except Exception as e:
         error_message = f"Failed to unbind concepts. Error: {str(e)}"
-        print(error_message)  # Log the error
+        print(error_message)
         return jsonify({"error": error_message}), 500
 
 
