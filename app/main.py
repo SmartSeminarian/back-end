@@ -226,7 +226,7 @@ def chat(github_username):
                     prompt += f"Problem: {problem.description}\n"
                     prompt += f"Your previous solution: {user_problem.solution_code}\n\n"
     else:
-        prompt += "Yor know everything about OOP. We will talk about that\n\n"
+        prompt += "Yor know everything about OOP. We will talk about that. i will right you hello, ask me what i would like to know about OOP\n\n"
 
     prompt += "Dialogue History:\n"
     for d in dialogue_history:
