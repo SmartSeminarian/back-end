@@ -225,8 +225,18 @@ def chat(github_username):
                 if problem:
                     prompt += f"Problem: {problem.description}\n"
                     prompt += f"Your previous solution: {user_problem.solution_code}\n\n"
+        elif context_type == 'concept':
+            # Add concept context handling
+            query = "MATCH (c:Concept {id: $id}) RETURN c"
+            result = memgraph.execute_and_fetch(query, {"id": context_id})
+            concept = next(result, None)
+            if concept:
+                concept_node = concept['c']
+                prompt += f"Concept: {concept_node.name}\n"
+                prompt += f"Description: {concept_node.description}\n"
+                prompt += f"Difficulty Level: {concept_node.difficulty}\n\n"
     else:
-        prompt += "Yor know everything about OOP. We will talk about that. i will write you hello, ask me what i would like to know about OOP\n\n"
+        prompt += "General Chat\n\n"
 
     prompt += "Dialogue History:\n"
     for d in dialogue_history:
