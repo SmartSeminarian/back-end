@@ -1,11 +1,17 @@
-[![Docker image](https://github.com/SmartSeminarian/back-end/actions/workflows/on-push-main.yml/badge.svg)](https://github.com/SmartSeminarian/back-end/actions/workflows/on-push-main.yml)
+## Developing (Docker)
 
-[API Docs [stage]](https://api-stage.csai.site/api/docs/)
+```
+# Initialize envivonment variables
+./init-local-env.sh
+# The you need to set up your openai-api-key
+```
 
-### branches and names
- - stage api-stage.csai.site
- - prod  api.csai.site
- - cicd-workflow debug branch
+```
+# build local image
+./build-local-image.sh
+```
 
-### version
-0.1
+```
+# Start containers
+docker compose up
+```
