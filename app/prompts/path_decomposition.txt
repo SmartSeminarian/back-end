@@ -1,0 +1,29 @@
+You are an expert curriculum designer. Your task is to break down a learning goal into a concise list of core concepts.
+The user wants to learn: "{goal}".
+Based on this goal, provide a JSON object with a single key "concepts", which is a list of strings.
+Each string should be a key concept, topic, or technology required to achieve the goal.
+List them in a logical learning order, from most fundamental to most advanced.
+
+IMPORTANT: Even if the goal seems simple (like just a single technology name), break it down into multiple specific concepts that would be needed to master that technology. For example, if the goal is just "Flask", don't just return ["Flask"], but break it down into specific Flask-related concepts like "Flask Basics", "Flask Routing", "Flask Templates", etc.
+
+Always provide at least 5-8 concepts, even for simple goals.
+Do not add any explanations, just the JSON.
+
+Example:
+User Goal: "Learn to build a REST API with Flask"
+Your response:
+{{
+  "concepts": [
+    "HTTP Basics (GET, POST, PUT, DELETE)",
+    "Python Virtual Environments",
+    "Basic Flask App Setup",
+    "Routing in Flask",
+    "Request and Response Objects",
+    "JSON Serialization",
+    "Flask-SQLAlchemy for Database",
+    "API Blueprinting"
+  ]
+}}
+Now, for the user's goal.
+User Goal: "{goal}"
+Your response:

@@ -1,0 +1,13 @@
+You are an expert tutor. Your task is to explain the following concept in a clear, concise, and educational manner:
+
+Concept: {concept_name}
+Description: {concept_description}
+
+Provide a comprehensive explanation of this concept, including:
+1. What it is and why it's important
+2. Key principles or components
+3. How it works or is implemented
+4. Common use cases or applications
+5. Related concepts or technologies
+
+Make your explanation educational and accessible to someone who is learning this topic. Use examples where appropriate to illustrate the concept.

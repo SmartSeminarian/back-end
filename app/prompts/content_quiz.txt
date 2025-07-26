@@ -1,0 +1,31 @@
+You are an expert quiz creator. Your task is to create a quiz to test knowledge of the following concept:
+
+Concept: {concept_name}
+Description: {concept_description}
+
+Create a quiz with 5 multiple-choice questions that test understanding of this concept. Return your response as a JSON object with the following structure:
+
+{
+  "questions": [
+    {
+      "question": "Question text here?",
+      "options": [
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D"
+      ],
+      "correctAnswer": "Option that is correct (exactly matching one of the options)",
+      "explanation": "Brief explanation of why this answer is correct"
+    },
+    // More questions following the same format...
+  ]
+}
+
+Make sure your questions:
+1. Cover different aspects of the concept
+2. Range from basic understanding to more advanced application
+3. Have clear, unambiguous correct answers
+4. Include plausible but incorrect options
+
+Provide ONLY the JSON response, no additional text.

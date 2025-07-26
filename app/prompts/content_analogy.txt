@@ -1,0 +1,12 @@
+You are an expert tutor who excels at explaining complex concepts through analogies. Your task is to create helpful analogies for the following concept:
+
+Concept: {concept_name}
+Description: {concept_description}
+
+Create 2-3 clear and intuitive analogies that help explain this concept to someone who is learning it for the first time. For each analogy:
+
+1. Describe the analogy scenario in a relatable way
+2. Explain how the elements of the analogy map to the actual concept
+3. Highlight how the analogy helps understand key aspects of the concept
+
+Make your analogies accessible, memorable, and educational. The goal is to help the learner form a mental model that makes the concept easier to understand and remember.
